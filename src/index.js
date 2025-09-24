@@ -3,7 +3,7 @@ addEventListener("fetch", event => {
 })
 
 async function fetchText(url) {
-  const res = await fetch(url)
+  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } })
   return await res.text()
 }
 
@@ -16,26 +16,25 @@ async function handleRequest(request) {
     const apiRes = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`)
     const json = await apiRes.json()
 
-    if (!json?.length || !json[0].file) return new Response("No streaming link found", { status: 404 })
+    if (!json?.length || !json[0].file) {
+      return new Response("No streaming link found for this TMDB ID", { status: 404 })
+    }
 
     const videoLink = json[0].file
     const title = json[0].title
     const poster = json[0].thumbnail
 
-    const manifest = await fetchText(videoLink)
-    const audioTracks = []
-    manifest.split("\n").forEach(line => {
-      if(line.startsWith("#EXT-X-MEDIA") && line.includes('TYPE=AUDIO')){
-        const nameMatch = line.match(/NAME="([^"]+)"/)
-        const langMatch = line.match(/LANGUAGE="([^"]+)"/)
-        const uriMatch = line.match(/URI="([^"]+)"/)
-        if(nameMatch && uriMatch){
-          audioTracks.push({
-            name: nameMatch[1],
-            lang: langMatch ? langMatch[1] : "",
-            uri: new URL(uriMatch[1], videoLink).href
-          })
-        }
+    // Fetch master M3U8 to parse audio tracks
+    const masterM3U8 = await fetchText(videoLink)
+    const audioLines = masterM3U8.split("\n").filter(l => l.startsWith("#EXT-X-MEDIA:TYPE=AUDIO"))
+    const audioTracks = audioLines.map((line, index) => {
+      const nameMatch = line.match(/NAME="([^"]+)"/)
+      const langMatch = line.match(/LANGUAGE="([^"]+)"/)
+      const uriMatch = line.match(/URI="([^"]+)"/)
+      return {
+        name: nameMatch ? nameMatch[1] : `Audio ${index+1}`,
+        lang: langMatch ? langMatch[1] : "",
+        uri: uriMatch ? new URL(uriMatch[1], videoLink).href : null
       }
     })
 
@@ -43,31 +42,33 @@ async function handleRequest(request) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
 <style>
-html,body{margin:0;height:100%;background:#000;font-family:'Roboto',sans-serif;overflow:hidden}
-#player{width:100%;height:100%;position:relative}
-video{width:100%;height:100%;object-fit:cover;background:#000}
-#overlay{position:absolute;top:20px;left:20px;color:#fff;font-size:20px;font-weight:bold;text-shadow:2px 2px 5px #000}
-#overlay div{display:block}
-#controls{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(0,0,0,0.5);opacity:0;transition:opacity 0.3s}
-#player:hover #controls{opacity:1}
-.btn{background:none;border:none;color:white;cursor:pointer;font-size:18px;margin:0 5px}
-select{background:#222;color:#fff;border:none;padding:5px;border-radius:5px}
-#centerPlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:64px;color:rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer}
-.skipBtn{position:absolute;top:50%;transform:translateY(-50%);font-size:36px;color:rgba(255,255,255,0.5);background:none;border:none;cursor:pointer;z-index:2;padding:0 20px}
-#skipBack{left:10px}
-#skipForward{right:10px}
-#progressContainer{position:absolute;bottom:50px;left:0;right:0;height:5px;background:rgba(255,255,255,0.2);cursor:pointer}
-#progress{width:0%;height:100%;background:#e50914}
+html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-serif; overflow:hidden; }
+#player { width:100%; height:100%; position:relative; }
+video, audio { width:100%; height:100%; object-fit:cover; background:#000; position:absolute; top:0; left:0; }
+#audioPlayer { pointer-events:none; }
+#overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; }
+#overlay div { display:block; }
+#controls { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(0,0,0,0.5); opacity:0; transition:opacity 0.3s; }
+#player:hover #controls { opacity:1; }
+.btn { background:none; border:none; color:white; cursor:pointer; font-size:18px; margin:0 5px; }
+select { background:#222; color:#fff; border:none; padding:5px; border-radius:5px; }
+#centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:64px; color:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; }
+.skipBtn { position:absolute; top:50%; transform:translateY(-50%); font-size:36px; color:rgba(255,255,255,0.5); background:none; border:none; cursor:pointer; z-index:2; padding:0 20px; }
+#skipBack { left:10px; }
+#skipForward { right:10px; }
+#progressContainer { position:absolute; bottom:50px; left:0; right:0; height:5px; background:rgba(255,255,255,0.2); cursor:pointer; }
+#progress { width:0%; height:100%; background:#e50914; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
 <div id="player">
   <video id="video" poster="${poster}" autoplay></video>
+  <audio id="audioPlayer" autoplay></audio>
   <div id="overlay"><div>Your Watching</div><div>${title}</div></div>
   <button id="centerPlay">⏯</button>
   <button class="skipBtn" id="skipBack">⏪10s</button>
@@ -75,12 +76,13 @@ select{background:#222;color:#fff;border:none;padding:5px;border-radius:5px}
   <div id="progressContainer"><div id="progress"></div></div>
   <div id="controls">
     <label>Audio:</label>
-    <select id="audioSelect"><option>Loading...</option></select>
+    <select id="audioSelect"><option value="">Loading...</option></select>
     <button class="btn" id="fullscreen">⛶</button>
   </div>
 </div>
 <script>
 const video = document.getElementById("video")
+const audioPlayer = document.getElementById("audioPlayer")
 const centerPlay = document.getElementById("centerPlay")
 const skipBack = document.getElementById("skipBack")
 const skipForward = document.getElementById("skipForward")
@@ -88,59 +90,82 @@ const fullscreenBtn = document.getElementById("fullscreen")
 const audioSelect = document.getElementById("audioSelect")
 const progress = document.getElementById("progress")
 const progressContainer = document.getElementById("progressContainer")
-let hls
+const hlsLink = "${videoLink}"
+const audioTracks = ${JSON.stringify(audioTracks)}
 
-function setupHls(src){
-  hls = new Hls()
-  hls.loadSource(src)
-  hls.attachMedia(video)
-  hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
-    video.play()
-  })
+// Initialize HLS for video
+let hlsVideo = null
+if(Hls.isSupported()){
+  hlsVideo = new Hls()
+  hlsVideo.loadSource(hlsLink)
+  hlsVideo.attachMedia(video)
+} else if(video.canPlayType('application/vnd.apple.mpegurl')){
+  video.src = hlsLink
 }
 
-// Initial load
-setupHls("${videoLink}")
+// Populate audio dropdown and set first track
+audioSelect.innerHTML = ''
+audioTracks.forEach((track,index)=>{
+  if(track.uri){
+    const option = document.createElement('option')
+    option.value = track.uri
+    option.text = track.name + (track.lang ? ' ('+track.lang+')':'')
+    audioSelect.appendChild(option)
+  }
+})
+if(audioTracks[0] && audioTracks[0].uri) audioPlayer.src = audioTracks[0].uri
 
-// Populate audio dropdown
-audioSelect.innerHTML = ""
-const tracks = ${JSON.stringify(audioTracks)}
-tracks.forEach((track,index)=>{
-  const option = document.createElement("option")
-  option.value = track.uri
-  option.text = track.name + (track.lang ? " ("+track.lang+")" : "")
-  audioSelect.appendChild(option)
+// Sync audio with video
+function syncAudio(){
+  audioPlayer.currentTime = video.currentTime
+  if(!video.paused) audioPlayer.play()
+  else audioPlayer.pause()
+}
+video.addEventListener('timeupdate', ()=>{ audioPlayer.currentTime = video.currentTime })
+
+// Center play toggle
+function togglePlay(){ 
+  if(video.paused){ video.play(); audioPlayer.play(); centerPlay.style.display='none' } 
+  else { video.pause(); audioPlayer.pause(); centerPlay.style.display='flex' } 
+}
+centerPlay.addEventListener("click", togglePlay)
+video.addEventListener("click", togglePlay)
+video.addEventListener("play", ()=>{ audioPlayer.play(); centerPlay.style.display='none' })
+video.addEventListener("pause", ()=>{ audioPlayer.pause(); centerPlay.style.display='flex' })
+
+// Skip buttons
+skipBack.addEventListener("click", ()=>{ video.currentTime=Math.max(0,video.currentTime-10); audioPlayer.currentTime=video.currentTime })
+skipForward.addEventListener("click", ()=>{ video.currentTime=Math.min(video.duration,video.currentTime+10); audioPlayer.currentTime=video.currentTime })
+
+// Fullscreen
+fullscreenBtn.addEventListener("click", ()=>{ video.requestFullscreen() })
+
+// Progress bar
+video.addEventListener("timeupdate", ()=>{ progress.style.width = ((video.currentTime/video.duration)*100)+'%' })
+progressContainer.addEventListener("click",(e)=>{
+  const rect = progressContainer.getBoundingClientRect()
+  const clickPos = (e.clientX - rect.left)/rect.width
+  video.currentTime = clickPos * video.duration
+  audioPlayer.currentTime = video.currentTime
 })
 
-// Switch audio without restarting video
+// Change audio track
 audioSelect.addEventListener("change", ()=>{
   const selectedURI = audioSelect.value
   if(selectedURI){
-    const currentTime = video.currentTime
-    hls.destroy()
-    hls = new Hls()
-    hls.loadSource(selectedURI)
-    hls.attachMedia(video)
-    hls.on(Hls.Events.MANIFEST_PARSED, ()=>{ video.currentTime=currentTime; video.play() })
+    const currTime = video.currentTime
+    audioPlayer.src = selectedURI
+    audioPlayer.currentTime = currTime
+    if(!video.paused) audioPlayer.play()
   }
 })
-
-// Controls
-function togglePlay(){if(video.paused){video.play();centerPlay.style.display='none'}else{video.pause();centerPlay.style.display='flex'}}
-centerPlay.addEventListener("click",togglePlay)
-video.addEventListener("click",togglePlay)
-video.addEventListener("play",()=>{centerPlay.style.display='none'})
-video.addEventListener("pause",()=>{centerPlay.style.display='flex'})
-skipBack.addEventListener("click",()=>{video.currentTime=Math.max(0,video.currentTime-10)})
-skipForward.addEventListener("click",()=>{video.currentTime=Math.min(video.duration,video.currentTime+10)})
-fullscreenBtn.addEventListener("click",()=>{video.requestFullscreen()})
-video.addEventListener("timeupdate",()=>{progress.style.width=(video.currentTime/video.duration*100)+'%'})
-progressContainer.addEventListener("click",(e)=>{const rect=progressContainer.getBoundingClientRect();const pos=(e.clientX-rect.left)/rect.width;video.currentTime=pos*video.duration})
 </script>
 </body>
 </html>
 `
 
-    return new Response(html, { headers:{ "Content-Type":"text/html","Access-Control-Allow-Origin":"*" } })
-  } catch(err){ return new Response(err.toString(), { status:500 }) }
+    return new Response(html, { headers: { "Content-Type": "text/html", "Access-Control-Allow-Origin": "*" } })
+  } catch(err){
+    return new Response(err.toString(), { status: 500 })
+  }
 }
