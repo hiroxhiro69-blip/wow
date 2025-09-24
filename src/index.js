@@ -65,6 +65,7 @@ html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-s
 #player { width:100%; height:100%; position:relative; cursor:default; }
 video { width:100%; height:100%; object-fit:cover; background:#000; }
 #overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; pointer-events:none; }
+#watermark { position:absolute; top:20px; right:20px; padding:6px 12px; font-size:14px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,0.85); background:rgba(0,0,0,0.45); border-radius:6px; pointer-events:none; backdrop-filter:blur(4px); }
 #centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:64px; color:rgba(255,255,255,0.85); display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; }
 
 /* Netflix-like controls */
@@ -143,8 +144,9 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 </head>
 <body>
 <div id="player">
-  <video id="video" poster="${poster}" autoplay></video>
+  <video id="video" poster="${poster}" autoplay playsinline webkit-playsinline x5-playsinline></video>
   <div id="overlay">${title}</div>
+  <div id="watermark">HiroXStream</div>
   <button id="centerPlay">⏯</button>
   <div id="spinner"></div>
   <div id="zoneLeft"></div>
@@ -210,6 +212,13 @@ const volume = document.getElementById("volume")
 const playPause = document.getElementById("playPause")
 const timeLabel = document.getElementById("timeLabel")
 const player = document.getElementById("player")
+
+// Ensure inline playback on mobile browsers and keep custom controls active
+video.setAttribute('playsinline', 'true')
+video.setAttribute('webkit-playsinline', 'true')
+video.setAttribute('x5-playsinline', 'true')
+video.playsInline = true
+video.controls = false
 
 let hls = null
 let audioSelect = null // virtual list source for Hls.js path
