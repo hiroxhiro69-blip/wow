@@ -1035,8 +1035,14 @@ function showControls(){
   }, autoHideDelay)
 }
 
+;['mousemove','pointermove','touchstart','touchmove'].forEach(evt => {
+  player.addEventListener(evt, () => {
+    showControls()
+  }, { passive: true })
+})
 document.addEventListener('keydown', (e)=>{
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return
+  showControls()
   if (e.code === 'Space'){ e.preventDefault(); togglePlay() }
   if (e.key === 'ArrowLeft'){ video.currentTime=Math.max(0,video.currentTime-10) }
   if (e.key === 'ArrowRight'){ video.currentTime=Math.min(video.duration,video.currentTime+10) }
