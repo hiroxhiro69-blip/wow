@@ -73,26 +73,107 @@ const progressContainer = document.getElementById("progressContainer")
 const fullscreenBtn = document.getElementById("fullscreen")
 const audioSelect = document.getElementById("audioSelect")
 
-const hls = new Hls()
-hls.loadSource("${videoLink}")
-hls.attachMedia(video)
+let hls = null
 
-hls.on(Hls.Events.MANIFEST_PARSED, () => {
-  // Populate audio tracks
+function populateAudioMenuFromHls(){
   audioSelect.innerHTML = ''
   hls.audioTracks.forEach((track, index) => {
     const option = document.createElement('option')
     option.value = index
-    option.text = track.name + (track.lang ? ' ('+track.lang+')' : '')
-    if(track.default) option.selected = true
+    const label = track.name || track.lang || ('Track ' + (index+1))
+    option.text = label + (track.lang && label !== track.lang ? ' ('+track.lang+')' : '')
+    if (track.default) option.selected = true
     audioSelect.appendChild(option)
   })
-})
+  if (!audioSelect.options.length){
+    const option = document.createElement('option')
+    option.text = 'No alternate audio'
+    audioSelect.appendChild(option)
+  }
+}
 
-// Audio track switching
-audioSelect.addEventListener('change', () => {
-  hls.audioTrack = parseInt(audioSelect.value)
-})
+function populateAudioMenuFromNative(){
+  audioSelect.innerHTML = ''
+  const aTracks = video.audioTracks || []
+  for (let i = 0; i < aTracks.length; i++){
+    const t = aTracks[i]
+    const option = document.createElement('option')
+    option.value = String(i)
+    const label = t.label || t.language || ('Track ' + (i+1))
+    option.text = label + (t.language && label !== t.language ? ' ('+t.language+')' : '')
+    if (t.enabled) option.selected = true
+    audioSelect.appendChild(option)
+  }
+  if (!audioSelect.options.length){
+    const option = document.createElement('option')
+    option.text = 'No alternate audio'
+    audioSelect.appendChild(option)
+  }
+}
+
+function initPlayer(){
+  if (window.Hls && Hls.isSupported()){
+    hls = new Hls({
+      enableWorker: true,
+      capLevelToPlayerSize: false,
+      // Keep video rendition stable when switching audio by not forcing auto right after
+    })
+    hls.loadSource("${videoLink}")
+    hls.attachMedia(video)
+
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      populateAudioMenuFromHls()
+    })
+
+    // In case tracks update after start
+    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+      populateAudioMenuFromHls()
+    })
+
+    // Keep the UI in sync if track is switched programmatically
+    hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_, data) => {
+      if (audioSelect && data && typeof data.id === 'number'){
+        audioSelect.value = String(data.id)
+      }
+    })
+
+    // Audio track switching: keep same video level
+    audioSelect.addEventListener('change', () => {
+      if (!hls) return
+      const targetAudio = parseInt(audioSelect.value)
+      const lockedLevel = hls.currentLevel // remember current video level
+      hls.audioTrack = targetAudio
+      if (lockedLevel !== undefined && lockedLevel !== null && lockedLevel >= 0){
+        hls.currentLevel = lockedLevel
+      }
+      if (video.paused === false){
+        // ensure playback continues smoothly after switch
+        video.play().catch(()=>{})
+      }
+    })
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari / iOS: use native HLS
+    video.src = "${videoLink}"
+    video.addEventListener('loadedmetadata', () => {
+      populateAudioMenuFromNative()
+    })
+    audioSelect.addEventListener('change', () => {
+      const idx = parseInt(audioSelect.value)
+      const aTracks = video.audioTracks || []
+      for (let i = 0; i < aTracks.length; i++){
+        aTracks[i].enabled = (i === idx)
+      }
+      if (video.paused === false){
+        video.play().catch(()=>{})
+      }
+    })
+  } else {
+    // Fallback: try setting src anyway
+    video.src = "${videoLink}"
+  }
+}
+
+initPlayer()
 
 // Center play toggle
 function togglePlay(){
