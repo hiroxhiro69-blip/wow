@@ -245,23 +245,31 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 
 /* Mobile-first tweaks */
 @media (max-width: 768px) {
-  #controls { padding:20px 12px calc(28px + env(safe-area-inset-bottom)); }
-  .btn { font-size:16px; padding:12px 0; border-radius:999px; flex:1; text-align:center; }
-  .time { width:100%; text-align:center; order:2; font-size:13px; color:#f0f0f0; }
-  #seekContainer { height:8px; margin:6px 0 10px; }
+  #controls { padding:20px 12px calc(30px + env(safe-area-inset-bottom)); }
+  .controls-bottom { flex-direction:column; align-items:stretch; gap:14px; }
+  .desktop-actions { display:none; }
+  .main-controls { background:rgba(0,0,0,0.4); border-radius:999px; padding:10px 14px; justify-content:space-between; align-items:center; }
+  .round-btn { display:flex; font-size:18px; background:rgba(255,255,255,0.14); }
+  .round-btn.active { background:#e50914; }
+  #mobilePlayToggle { width:52px; height:52px; font-size:20px; }
+  .mobile-actions { display:flex; flex:1; justify-content:flex-end; gap:10px; }
+  .time { flex:1; text-align:center; font-size:13px; color:#f5f5f5; }
+  #seekContainer { height:6px; margin:4px 0 8px; }
   #volumeContainer { display:none; }
-  .controls-bottom { flex-direction:column; align-items:stretch; gap:12px; }
-  .controls-bottom .right { display:flex; gap:8px; justify-content:space-between; }
-  #pipBtn { display:none; }
-  #fullscreen { flex:1.2; }
   #audioMenu, #qualityMenu, #speedMenu { position:fixed; left:0; right:0; bottom:0; border-radius:16px 16px 0 0; padding-bottom:calc(18px + env(safe-area-inset-bottom)); margin:0; max-height:50vh; }
   .audio-item, .menu-item { padding:16px 20px; font-size:16px; }
   #zoneLeft, #zoneRight { width:48%; }
 }
 
-/* Left/right clusters */
+/* Control layout */
 .controls-top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.controls-bottom { display:flex; align-items:center; justify-content:space-between; gap:18px; }
+.controls-bottom { display:flex; align-items:center; justify-content:space-between; gap:18px; width:100%; }
+.main-controls { display:flex; align-items:center; justify-content:flex-start; gap:12px; width:100%; }
+.mobile-actions { display:none; align-items:center; gap:10px; }
+.desktop-actions { display:flex; align-items:center; gap:12px; }
+.round-btn { background:rgba(255,255,255,0.08); border:none; color:white; width:44px; height:44px; border-radius:50%; display:none; align-items:center; justify-content:center; font-size:18px; padding:0; transition:background .2s ease, transform .2s ease; }
+.round-btn:hover { background:rgba(255,255,255,0.12); }
+.round-btn:active { transform:scale(0.92); }
 .left, .right { display:flex; align-items:center; gap:12px; }
 
 /* Seek badges (Netflix-like) */
@@ -299,16 +307,26 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
   <div id="controls">
     <div id="seekContainer"><div id="seekProgress"></div></div>
     <div class="controls-bottom">
-      <span class="time" id="timeLabel">00:00 / 00:00</span>
-      <div class="right">
+      <div class="main-controls">
+        <button class="round-btn" id="mobilePlayToggle" aria-label="Play/Pause">▶</button>
+        <span class="time" id="timeLabel">00:00 / 00:00</span>
+        <div class="mobile-actions">
+          <button class="round-btn" id="mobileMute" aria-label="Mute">🔊</button>
+          <button class="round-btn" id="mobileAudio" aria-label="Audio tracks">🎵</button>
+          <button class="round-btn" id="mobileQuality" aria-label="Quality">HD</button>
+          <button class="round-btn" id="mobileSpeed" aria-label="Playback speed">⏱</button>
+          <button class="round-btn" id="mobileFullscreen" aria-label="Fullscreen">⛶</button>
+        </div>
+      </div>
+      <div class="desktop-actions">
         <div id="volumeContainer">
           <button class="btn" id="muteBtn" aria-label="Mute" title="Mute">🔊</button>
           <input type="range" id="volume" min="0" max="1" step="0.05" value="1" />
         </div>
-        <button class="btn" id="audioBtn" aria-label="Audio tracks" title="Audio tracks">🎵</button>
-        <button class="btn" id="qualityBtn" aria-label="Quality" title="Quality">HD</button>
-        <button class="btn" id="speedBtn" aria-label="Playback speed" title="Playback speed">⏱</button>
-        <button class="btn" id="pipBtn" aria-label="Picture in picture" title="Picture in picture">🗗</button>
+        <button class="btn" id="audioBtn" aria-label="Audio tracks" title="Audio tracks">Audio ▾</button>
+        <button class="btn" id="qualityBtn" aria-label="Quality" title="Quality">Quality ▾</button>
+        <button class="btn" id="speedBtn" aria-label="Playback speed" title="Playback speed">Speed ▾</button>
+        <button class="btn" id="pipBtn" aria-label="Picture in picture" title="Picture in picture">PiP</button>
         <button class="btn" id="fullscreen" aria-label="Fullscreen" title="Fullscreen">⛶</button>
       </div>
     </div>
@@ -410,7 +428,15 @@ function updateOrientationUI(){
   if (!isMobileCoarse()) return
   const isFs = isFullscreenActive()
   const isPortrait = window.innerHeight > window.innerWidth
-  rotateOverlay.style.display = (isFs && isPortrait) ? 'flex' : 'none'
+  const shouldBlock = isFs && isPortrait
+  rotateOverlay.style.display = shouldBlock ? 'flex' : 'none'
+  if (shouldBlock){
+    if (!video.paused){ video.pause() }
+  } else {
+    if (mobilePlayToggle && mobilePlayToggle.classList.contains('active') && video.paused){
+      video.play().catch(()=>{})
+    }
+  }
 }
 
 function renderAudioMenu(items, activeIndex){
@@ -594,9 +620,11 @@ function togglePlay(){
   if(video.paused){
     video.play();
     centerPlay.style.display='none';
+    if (mobilePlayToggle){ mobilePlayToggle.textContent = '⏸'; mobilePlayToggle.classList.add('active'); }
   } else {
     video.pause();
     centerPlay.style.display='flex';
+    if (mobilePlayToggle){ mobilePlayToggle.textContent = '▶'; mobilePlayToggle.classList.remove('active'); }
   }
 }
 centerPlay.addEventListener("click", togglePlay)
