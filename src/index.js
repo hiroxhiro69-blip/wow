@@ -42,16 +42,108 @@ async function handleRequest(request) {
   if (!tmdbId) return new Response("Missing ?tmdb= parameter", { status: 400 })
 
   try {
-    const apiRes = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`)
-    const json = await apiRes.json()
+    const seasonParam = url.searchParams.get("season")
+    const episodeParam = url.searchParams.get("episode")
+    const contentType = seasonParam && episodeParam ? "series" : "movie"
 
-    if (!json?.length || !json[0].file) {
+    if (contentType === "series" && (!seasonParam || !episodeParam)) {
+      return new Response("Missing ?season=&episode= parameters for series request", { status: 400 })
+    }
+
+    let videoLink = ""
+    let title = ""
+    let poster = ""
+    let streamHeaders = {}
+    let streamLanguage = "Default"
+    let streamVariants = []
+
+    const kstreamEndpoint = contentType === "series"
+      ? `https://kstream.vercel.app/api/content/tv/${tmdbId}/${seasonParam}/${episodeParam}`
+      : `https://kstream.vercel.app/api/content/movie/${tmdbId}`
+
+    const nowowEndpoint = contentType === "series"
+      ? `https://nowow.xdtohin2.workers.dev/?tmdb=${tmdbId}/${seasonParam}/${episodeParam}`
+      : `https://nowow.xdtohin2.workers.dev/?tmdb=${tmdbId}`
+
+    const [kstreamRes, nowowRes] = await Promise.all([
+      fetch(kstreamEndpoint, {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          "Accept": "application/json"
+        }
+      }),
+      fetch(nowowEndpoint, {
+        headers: {
+          "User-Agent": "Mozilla/5.0",
+          "Accept": "application/json"
+        }
+      })
+    ])
+
+    if (!kstreamRes.ok) {
+      return new Response(`Upstream error from kstream (${kstreamRes.status})`, { status: 502 })
+    }
+
+    if (!nowowRes.ok) {
+      return new Response(`Upstream error from nowow (${nowowRes.status})`, { status: 502 })
+    }
+
+    const [kstreamData, nowowData] = await Promise.all([kstreamRes.json(), nowowRes.json()])
+
+    const kstreamStreams = Array.isArray(kstreamData?.streams) ? kstreamData.streams : []
+    const nowowStreams = Array.isArray(nowowData?.streams) ? nowowData.streams : []
+
+    if (!kstreamStreams.length && !nowowStreams.length) {
       return new Response("No streaming link found for this TMDB ID", { status: 404 })
     }
 
-    const videoLink = json[0].file
-    const title = json[0].title
-    const poster = json[0].thumbnail
+    const pickPreferredStream = (streams) => {
+      const lower = (value) => (typeof value === "string" ? value.toLowerCase() : "")
+      const english = streams.find(s => lower(s.language).includes("english"))
+      return english || streams[0]
+    }
+
+    const chosenKStream = kstreamStreams.length ? pickPreferredStream(kstreamStreams) : null
+    const chosenNowowStream = nowowStreams.length ? pickPreferredStream(nowowStreams) : null
+
+    let chosenStream = null
+    if (chosenNowowStream && chosenNowowStream.url) {
+      chosenStream = chosenNowowStream
+    } else if (chosenKStream && chosenKStream.url) {
+      chosenStream = chosenKStream
+    }
+
+    videoLink = chosenStream?.url || ""
+    streamHeaders = chosenStream?.headers || {}
+    streamLanguage = chosenStream?.language || "Default"
+
+    streamVariants = [...kstreamStreams, ...nowowStreams].map((s, idx) => ({
+      id: idx,
+      language: s.language || `Stream ${idx + 1}`,
+      url: s.url,
+      headers: s.headers || {}
+    }))
+
+    title = kstreamData?.title || nowowData?.title || `TMDB #${tmdbId}`
+    poster = kstreamData?.poster || kstreamData?.thumbnail || nowowData?.poster || nowowData?.thumbnail || ""
+
+    if (!videoLink) {
+      return new Response("No playable stream was resolved", { status: 500 })
+    }
+
+    if (!poster) {
+      poster = ""
+    }
+
+    if (!title) {
+      title = "HiroXStream"
+    }
+
+    const storageKeyParts = ["player", contentType, tmdbId]
+    if (contentType === "series") {
+      storageKeyParts.push(`s${seasonParam || "0"}e${episodeParam || "0"}`)
+    }
+    const storageKey = storageKeyParts.filter(Boolean).join(":")
 
     const html = `
 <!DOCTYPE html>
@@ -216,6 +308,10 @@ const playPause = document.getElementById("playPause")
 const timeLabel = document.getElementById("timeLabel")
 const player = document.getElementById("player")
 const body = document.body
+const streamHeaders = ${JSON.stringify(streamHeaders)}
+const streamVariants = ${JSON.stringify(streamVariants)}
+const streamLanguage = ${JSON.stringify(streamLanguage)}
+const storageKey = ${JSON.stringify(storageKey)}
 
 // Ensure inline playback on mobile browsers and keep custom controls active
 video.setAttribute('playsinline', 'true')
@@ -227,7 +323,6 @@ video.controls = false
 let hls = null
 let audioSelect = null // virtual list source for Hls.js path
 let controlsHideTimer = null
-const storageKey = 'player:' + (${tmdbId?('"'+tmdbId+'"'):'"unknown"'})
 
 // Mobile landscape helper
 function isMobileCoarse(){
@@ -294,7 +389,17 @@ function initPlayer(){
       startLevel: -1,
       maxBufferLength: 30,
       maxLiveSyncPlaybackRate: 1.5,
-      liveDurationInfinity: true
+      liveDurationInfinity: true,
+      xhrSetup: function(xhr, url){
+        xhr.withCredentials = false
+        const headers = ${JSON.stringify(streamHeaders)}
+        if (headers){
+          Object.keys(headers).forEach(key => {
+            const value = headers[key]
+            if (value){ xhr.setRequestHeader(key, value) }
+          })
+        }
+      }
       // Keep video rendition stable when switching audio by not forcing auto right after
     })
 hls.loadSource("${videoLink}")
