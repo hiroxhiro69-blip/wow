@@ -207,7 +207,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #player.show-controls #controls { opacity:1; transform:translateY(0); }
 #player.hide-cursor { cursor:none; }
 .row { display:flex; align-items:center; gap:10px; color:#fff; }
-.btn { background:rgba(255,255,255,0.08); border:none; color:white; cursor:pointer; font-size:18px; padding:8px 10px; border-radius:6px; transition:background .2s ease; }
+.btn { background:rgba(255,255,255,0.08); border:none; color:white; cursor:pointer; font-size:18px; padding:8px 12px; border-radius:10px; transition:background .2s ease; }
 .btn:hover { background:rgba(255,255,255,0.1); }
 .time { font-variant-numeric:tabular-nums; font-size:14px; color:#ddd; }
 
@@ -216,8 +216,8 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #seekProgress { position:absolute; top:0; left:0; height:100%; width:0%; background:#e50914; border-radius:3px; }
 
 /* Volume */
-#volumeContainer { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:rgba(0,0,0,0.35); }
-#volume { -webkit-appearance:none; appearance:none; width:100px; height:4px; background:#666; border-radius:2px; outline:none; }
+#volumeContainer { display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:999px; background:rgba(0,0,0,0.28); }
+#volume { -webkit-appearance:none; appearance:none; width:110px; height:4px; background:#666; border-radius:2px; outline:none; }
 #volume::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:12px; height:12px; background:#fff; border-radius:50%; cursor:pointer; }
 
 /* Audio menu */
@@ -245,16 +245,18 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 
 /* Mobile-first tweaks */
 @media (max-width: 768px) {
-  .btn { font-size:22px; padding:10px 12px; }
-  .time { font-size:13px; }
-  #seekContainer { height:10px; margin:10px 0 8px; }
-  #volume { width:80px; height:6px; }
-  .controls-bottom { gap:8px; }
-  .left, .right { gap:6px; }
-  /* Menus as bottom sheets */
-  #audioMenu, #qualityMenu, #speedMenu { position:fixed; left:0; right:0; bottom:0; border-radius:12px 12px 0 0; padding-bottom:calc(12px + env(safe-area-inset-bottom)); margin:0 0; max-height:45vh; }
-  .audio-item, .menu-item { padding:14px 18px; font-size:16px; }
-  #zoneLeft, #zoneRight { width:45%; }
+  #controls { padding:20px 12px calc(28px + env(safe-area-inset-bottom)); }
+  .btn { font-size:16px; padding:12px 0; border-radius:999px; flex:1; text-align:center; }
+  .time { width:100%; text-align:center; order:2; font-size:13px; color:#f0f0f0; }
+  #seekContainer { height:8px; margin:6px 0 10px; }
+  #volumeContainer { display:none; }
+  .controls-bottom { flex-direction:column; align-items:stretch; gap:12px; }
+  .controls-bottom .right { display:flex; gap:8px; justify-content:space-between; }
+  #pipBtn { display:none; }
+  #fullscreen { flex:1.2; }
+  #audioMenu, #qualityMenu, #speedMenu { position:fixed; left:0; right:0; bottom:0; border-radius:16px 16px 0 0; padding-bottom:calc(18px + env(safe-area-inset-bottom)); margin:0; max-height:50vh; }
+  .audio-item, .menu-item { padding:16px 20px; font-size:16px; }
+  #zoneLeft, #zoneRight { width:48%; }
 }
 
 /* Left/right clusters */
@@ -300,14 +302,14 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
       <span class="time" id="timeLabel">00:00 / 00:00</span>
       <div class="right">
         <div id="volumeContainer">
-          <button class="btn" id="muteBtn">🔊</button>
+          <button class="btn" id="muteBtn" aria-label="Mute" title="Mute">🔊</button>
           <input type="range" id="volume" min="0" max="1" step="0.05" value="1" />
         </div>
-        <button class="btn" id="audioBtn">Audio ▾</button>
-        <button class="btn" id="qualityBtn">Quality ▾</button>
-        <button class="btn" id="speedBtn">Speed ▾</button>
-        <button class="btn" id="pipBtn">PiP</button>
-        <button class="btn" id="fullscreen">⛶</button>
+        <button class="btn" id="audioBtn" aria-label="Audio tracks" title="Audio tracks">🎵</button>
+        <button class="btn" id="qualityBtn" aria-label="Quality" title="Quality">HD</button>
+        <button class="btn" id="speedBtn" aria-label="Playback speed" title="Playback speed">⏱</button>
+        <button class="btn" id="pipBtn" aria-label="Picture in picture" title="Picture in picture">🗗</button>
+        <button class="btn" id="fullscreen" aria-label="Fullscreen" title="Fullscreen">⛶</button>
       </div>
     </div>
     <div id="audioMenu"></div>
@@ -602,7 +604,7 @@ video.addEventListener("click", togglePlay)
 video.addEventListener("play", ()=>{ centerPlay.style.display='none' })
 video.addEventListener("pause", ()=>{ centerPlay.style.display='flex' })
 // Attempt to lock to landscape on mobile when playback starts
-video.addEventListener('play', ()=>{ lockLandscapeIfPossible() })
+video.addEventListener('play', ()=>{ lockLandscapeIfPossible(); ensureMobileLandscape() })
 
 // Time/seek bar
 function fmtTime(t){ if(!isFinite(t)) return '00:00'; const h=Math.floor(t/3600); const m=Math.floor((t%3600)/60); const s=Math.floor(t%60); return (h>0?(h+':'):'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0') }
@@ -666,6 +668,13 @@ function exitMobilePseudoFullscreen(){
   unlockOrientationIfPossible()
   showControls()
   updateOrientationUI()
+}
+
+function ensureMobileLandscape(){
+  if (!isMobileCoarse()) return
+  if (!player.classList.contains('mobile-fullscreen')){
+    enterMobilePseudoFullscreen()
+  }
 }
 
 async function toggleFullscreen(){
