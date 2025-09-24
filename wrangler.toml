@@ -1,12 +1,8 @@
-name = "hls-proxy-worker"      # Name of your Worker
-main = "src/index.js"          # Entry file for your Worker
-type = "javascript"            # Worker type (can be "javascript" or "modules" if using ES modules)
+name = "hls-proxy-worker"           # Name of your Worker
+main = "src/index.js"               # Entry file for your Worker
+account_id = "f700a4562154ead08fcc94fed4e666de"  # Your Cloudflare account ID
+workers_dev = true                   # Deploy to a workers.dev subdomain
+compatibility_date = "2025-09-24"   # Keep this current
 
-account_id = "YOUR_ACCOUNT_ID"  # Replace with your Cloudflare account ID
-workers_dev = true              # Deploy to a workers.dev subdomain
-compatibility_date = "2025-09-24"  # Keep this current
-
-# Optional: GitHub deployment settings
-# Ensure you set up GitHub integration in Cloudflare dashboard
 [build]
-command = ""                   # Leave empty if no build step
+command = ""                         # Leave empty if no build step
