@@ -406,23 +406,48 @@ volume.addEventListener('input', ()=>{ video.volume = parseFloat(volume.value); 
 muteBtn.addEventListener('click', ()=>{ video.muted = !video.muted; if(!video.muted && video.volume===0){ video.volume=0.5; volume.value='0.5' } muteBtn.textContent = (video.muted?'🔇':'🔊') })
 
 // Fullscreen
-function toggleFullscreen(){
-  if (!document.fullscreenElement){
-    (video.requestFullscreen && video.requestFullscreen()) || (player.requestFullscreen && player.requestFullscreen())
+function requestFullscreenElement(el){
+  if (!el) return Promise.reject(new Error('No element to fullscreen'))
+  if (el.requestFullscreen) return el.requestFullscreen()
+  if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen()
+  if (el.msRequestFullscreen) return el.msRequestFullscreen()
+  return Promise.reject(new Error('Fullscreen API not available'))
+}
+
+function exitFullscreen(){
+  if (document.exitFullscreen) return document.exitFullscreen()
+  if (document.webkitExitFullscreen) return document.webkitExitFullscreen()
+  if (document.msExitFullscreen) return document.msExitFullscreen()
+  return Promise.resolve()
+}
+
+async function toggleFullscreen(){
+  if (!isFullscreenActive()){
+    try {
+      await requestFullscreenElement(player)
+    } catch (_err){
+      await requestFullscreenElement(video).catch(()=>{})
+    }
   } else {
-    (document.exitFullscreen && document.exitFullscreen())
+    await exitFullscreen()
   }
 }
 fullscreenBtn.addEventListener("click", toggleFullscreen)
-document.addEventListener('fullscreenchange', ()=>{
+
+function onFullscreenChange(){
   showControls()
-  if (document.fullscreenElement){
+  if (isFullscreenActive()){
     lockLandscapeIfPossible()
   } else {
     unlockOrientationIfPossible()
   }
+  video.controls = false
   updateOrientationUI()
-})
+}
+
+document.addEventListener('fullscreenchange', onFullscreenChange)
+document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+document.addEventListener('msfullscreenchange', onFullscreenChange)
 window.addEventListener('orientationchange', updateOrientationUI)
 window.addEventListener('resize', updateOrientationUI)
 
