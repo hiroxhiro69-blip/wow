@@ -4,26 +4,29 @@ addEventListener('fetch', event => {
 
 async function handleRequest(request) {
   const url = new URL(request.url)
-  const tmdbId = url.searchParams.get('tmdb') // expect ?tmdb=ID
+  const tmdbId = url.searchParams.get('tmdb') // ?tmdb=ID
 
-  if (!tmdbId) {
-    return new Response('Missing ?tmdb= parameter', { status: 400 })
-  }
+  if (!tmdbId) return new Response('Missing ?tmdb= parameter', { status: 400 })
 
   try {
-    // Fetch the HLS info from uembed
     const res = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Cloudflare Worker HLS Proxy)'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+        'Accept': 'application/json, text/javascript, */*; q=0.01',
+        'Referer': 'https://uembed.site/',
+        'Origin': 'https://uembed.site'
       }
     })
 
-    const data = await res.json() // parse JSON
-    if (!data || !data.file) {
-      return new Response('No streaming link found for this TMDB ID', { status: 404 })
+    const contentType = res.headers.get('Content-Type') || ''
+    if (!contentType.includes('application/json')) {
+      const text = await res.text()
+      return new Response('Unexpected response: ' + text.slice(0, 200), { status: 500 })
     }
 
-    // Return the HLS link
+    const data = await res.json()
+    if (!data || !data.file) return new Response('No streaming link found for this TMDB ID', { status: 404 })
+
     return new Response(JSON.stringify({
       title: data.title,
       thumbnail: data.thumbnail,
@@ -32,8 +35,7 @@ async function handleRequest(request) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, OPTIONS'
+        'Access-Control-Allow-Origin': '*'
       }
     })
   } catch (err) {
