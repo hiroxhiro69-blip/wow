@@ -975,7 +975,8 @@ function showControls(){
   if (isFullscreenActive()){
     return
   }
-  controlsHideTimer = setTimeout(()=>{
+  const autoHideDelay = 3000
+  controlsHideTimer = setTimeout(() => {
     // keep controls visible if audio menu is open or when fullscreen toggles mid-timeout
     if (audioMenu.classList.contains('show') || isFullscreenActive()){
       player.classList.add('show-controls')
@@ -984,13 +985,8 @@ function showControls(){
     }
     player.classList.remove('show-controls')
     player.classList.add('hide-cursor')
-  }, (window.innerWidth<=768 ? 3000 : 2000))
+  }, autoHideDelay)
 }
-['mousemove','touchstart','keydown'].forEach(evt=>{ player.addEventListener(evt, showControls) })
-showControls()
-
-// Keyboard shortcuts
-document.addEventListener('keydown', (e)=>{
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return
   if (e.code === 'Space'){ e.preventDefault(); togglePlay() }
   if (e.key === 'ArrowLeft'){ video.currentTime=Math.max(0,video.currentTime-10) }
