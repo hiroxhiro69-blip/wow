@@ -8,6 +8,7 @@ async function handleRequest(request) {
   if (!tmdbId) return new Response("Missing ?tmdb= parameter", { status: 400 })
 
   try {
+    // Fetch video JSON from uEmbed
     const apiRes = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`)
     const json = await apiRes.json()
 
@@ -27,18 +28,18 @@ async function handleRequest(request) {
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
 <style>
-  html, body { margin:0; height:100%; background:#000; overflow:hidden; font-family:'Roboto',sans-serif; }
-  #player { width:100%; height:100%; position:relative; background:black; display:flex; justify-content:center; align-items:center; }
-  video { width:100%; height:100%; object-fit:cover; background:black; }
-  #overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:24px; font-weight:bold; text-shadow:2px 2px 5px #000; }
-  #controls { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(0,0,0,0.5); opacity:0; transition:opacity 0.3s; }
-  #player:hover #controls { opacity:1; }
-  .btn { background:none; border:none; color:white; cursor:pointer; font-size:18px; margin:0 5px; }
-  select { background:#222; color:#fff; border:none; padding:5px; border-radius:5px; }
-  #centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:64px; color:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; }
-  .skipBtn { position:absolute; top:50%; transform:translateY(-50%); font-size:36px; color:rgba(255,255,255,0.5); background:none; border:none; cursor:pointer; z-index:2; padding:0 20px; }
-  #skipBack { left:10px; }
-  #skipForward { right:10px; }
+html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:'Roboto',sans-serif;}
+#player{width:100%;height:100%;position:relative;display:flex;justify-content:center;align-items:center;background:black;}
+video{width:100%;height:100%;object-fit:cover;background:black;}
+#overlay{position:absolute;top:20px;left:20px;color:#fff;font-size:24px;font-weight:bold;text-shadow:2px 2px 5px #000;}
+#controls{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:space-between;align-items:center;padding:10px;background:rgba(0,0,0,0.5);opacity:0;transition:opacity 0.3s;}
+#player:hover #controls{opacity:1;}
+.btn{background:none;border:none;color:white;cursor:pointer;font-size:18px;margin:0 5px;}
+select{background:#222;color:#fff;border:none;padding:5px;border-radius:5px;}
+#centerPlay{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:64px;color:rgba(255,255,255,0.8);display:flex;align-items:center;justify-content:center;cursor:pointer;pointer-events:auto;}
+.skipBtn{position:absolute;top:50%;transform:translateY(-50%);font-size:36px;color:rgba(255,255,255,0.5);background:none;border:none;cursor:pointer;z-index:2;padding:0 20px;}
+#skipBack{left:10px;}
+#skipForward{right:10px;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
@@ -58,67 +59,60 @@ async function handleRequest(request) {
   </div>
 </div>
 <script>
-const video = document.getElementById("video")
-const centerPlay = document.getElementById("centerPlay")
-const skipBack = document.getElementById("skipBack")
-const skipForward = document.getElementById("skipForward")
-const fullscreenBtn = document.getElementById("fullscreen")
-const audioSelect = document.getElementById("audioSelect")
-const subtitleSelect = document.getElementById("subtitleSelect")
-const hlsLink = "${videoLink}"
+const video=document.getElementById("video")
+const centerPlay=document.getElementById("centerPlay")
+const skipBack=document.getElementById("skipBack")
+const skipForward=document.getElementById("skipForward")
+const fullscreenBtn=document.getElementById("fullscreen")
+const audioSelect=document.getElementById("audioSelect")
+const subtitleSelect=document.getElementById("subtitleSelect")
+const hlsLink="${videoLink}"
 
-// Toggle center play/pause
-function togglePlay() {
-  if(video.paused){ video.play(); centerPlay.style.display='none' }
-  else { video.pause(); centerPlay.style.display='flex' }
-}
-centerPlay.addEventListener("click", togglePlay)
-video.addEventListener("click", togglePlay)
-video.addEventListener("play", ()=>{ centerPlay.style.display='none' })
-video.addEventListener("pause", ()=>{ centerPlay.style.display='flex' })
+// Center play/pause
+function togglePlay(){ if(video.paused){video.play();centerPlay.style.display='none'}else{video.pause();centerPlay.style.display='flex'} }
+centerPlay.addEventListener("click",togglePlay)
+video.addEventListener("click",togglePlay)
+video.addEventListener("play",()=>{centerPlay.style.display='none'})
+video.addEventListener("pause",()=>{centerPlay.style.display='flex'})
 
-// Skip 10s
-skipBack.addEventListener("click", ()=>{ video.currentTime = Math.max(0, video.currentTime - 10) })
-skipForward.addEventListener("click", ()=>{ video.currentTime = Math.min(video.duration, video.currentTime + 10) })
+// Skip buttons
+skipBack.addEventListener("click",()=>{video.currentTime=Math.max(0,video.currentTime-10)})
+skipForward.addEventListener("click",()=>{video.currentTime=Math.min(video.duration,video.currentTime+10)})
+fullscreenBtn.addEventListener("click",()=>{video.requestFullscreen()})
 
-fullscreenBtn.addEventListener("click", ()=>{ video.requestFullscreen() })
-
+// HLS.js setup
 if(Hls.isSupported()){
-  const hls = new Hls()
+  const hls=new Hls({enableWebVTT:true})
   hls.loadSource(hlsLink)
   hls.attachMedia(video)
 
-  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+  hls.on(Hls.Events.MANIFEST_PARSED,()=>{
+    // Audio tracks
     if(hls.audioTracks.length>0){
       audioSelect.innerHTML=''
-      hls.audioTracks.forEach((track,index)=>{
-        const option=document.createElement('option')
-        option.value=index
-        option.text=track.name||("Audio "+(index+1))
-        audioSelect.appendChild(option)
+      hls.audioTracks.forEach((track,i)=>{
+        const opt=document.createElement('option')
+        opt.value=i
+        opt.text=track.name||("Audio "+(i+1))
+        audioSelect.appendChild(opt)
       })
     }
+    // Subtitle tracks
     if(hls.subtitleTracks.length>0){
       subtitleSelect.innerHTML='<option value="off">Off</option>'
-      hls.subtitleTracks.forEach((track,index)=>{
-        const option=document.createElement('option')
-        option.value=index
-        option.text=track.name||("Subtitle "+(index+1))
-        subtitleSelect.appendChild(option)
+      hls.subtitleTracks.forEach((track,i)=>{
+        const opt=document.createElement('option')
+        opt.value=i
+        opt.text=track.name||("Subtitle "+(i+1))
+        subtitleSelect.appendChild(opt)
       })
     }
   })
 
-  audioSelect.addEventListener("change", ()=>{
-    const val = audioSelect.value
-    hls.audioTrack = val==='default'?0:parseInt(val)
-  })
-  subtitleSelect.addEventListener("change", ()=>{
-    const val = subtitleSelect.value
-    hls.subtitleTrack = val==='off'? -1:parseInt(val)
-  })
+  audioSelect.addEventListener("change",()=>{hls.audioTrack=audioSelect.value==='default'?0:parseInt(audioSelect.value)})
+  subtitleSelect.addEventListener("change",()=>{hls.subtitleTrack=subtitleSelect.value==='off'?-1:parseInt(subtitleSelect.value)})
 }else if(video.canPlayType('application/vnd.apple.mpegurl')){
-  video.src = hlsLink
+  video.src=hlsLink
 }
 </script>
 </body>
