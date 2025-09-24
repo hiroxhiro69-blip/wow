@@ -357,6 +357,12 @@ const rotateOverlay = document.getElementById("rotateOverlay");
 const muteBtn = document.getElementById("muteBtn");
 const volume = document.getElementById("volume");
 const timeLabel = document.getElementById("timeLabel");
+const mobilePlayToggle = document.getElementById("mobilePlayToggle");
+const mobileMute = document.getElementById("mobileMute");
+const mobileAudio = document.getElementById("mobileAudio");
+const mobileQuality = document.getElementById("mobileQuality");
+const mobileSpeed = document.getElementById("mobileSpeed");
+const mobileFullscreen = document.getElementById("mobileFullscreen");
 const player = document.getElementById("player");
 const body = document.body;
 const initialStreamHeaders = ${JSON.stringify(streamHeaders)};
@@ -368,6 +374,8 @@ const initialStreamUrl = ${JSON.stringify(videoLink)};
 let currentStreamHeaders = initialStreamHeaders || {};
 let currentStreamUrl = initialStreamUrl;
 let activeStreamIndex = -1;
+let resumeAfterPortrait = false;
+let orientationForcedPause = false;
 
 if (Array.isArray(streamVariants) && streamVariants.length){
   let savedVariantIndex = -1;
@@ -412,7 +420,20 @@ let controlsHideTimer = null;
 
 // Mobile landscape helper
 function isMobileCoarse(){
-  try { return window.matchMedia && window.matchMedia('(pointer: coarse)').matches } catch(_e){ return false }
+  try {
+    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches){
+      return true
+    }
+  } catch(_e){}
+  const maxTouch = Number(navigator.maxTouchPoints || navigator.msMaxTouchPoints || 0)
+  if (maxTouch > 1){
+    return true
+  }
+  const ua = (navigator.userAgent || navigator.vendor || '').toLowerCase()
+  if (/iphone|ipad|ipod|android|mobile|mobi|silk|kindle|blackberry|bb10/.test(ua)){
+    return true
+  }
+  return false
 }
 async function lockLandscapeIfPossible(){
   if (!isMobileCoarse()) return
@@ -662,8 +683,61 @@ seekContainer.addEventListener('touchmove', (e)=>{
 seekContainer.addEventListener('touchend', ()=>{ seekingTouch=false })
 
 // Volume/mute
-volume.addEventListener('input', ()=>{ video.volume = parseFloat(volume.value); video.muted = (video.volume===0); muteBtn.textContent = (video.muted?'🔇':'🔊') })
-muteBtn.addEventListener('click', ()=>{ video.muted = !video.muted; if(!video.muted && video.volume===0){ video.volume=0.5; volume.value='0.5' } muteBtn.textContent = (video.muted?'🔇':'🔊') })
+function syncMuteIcons(){
+  const icon = (video.muted ? '🔇' : '🔊')
+  muteBtn.textContent = icon
+  if (mobileMute){ mobileMute.textContent = icon }
+}
+volume.addEventListener('input', ()=>{
+  video.volume = parseFloat(volume.value);
+  video.muted = (video.volume===0);
+  if (video.volume > 0 && video.muted){ video.muted = false }
+  syncMuteIcons()
+})
+muteBtn.addEventListener('click', ()=>{
+  video.muted = !video.muted;
+  if (!video.muted && video.volume===0){ video.volume=0.5; volume.value='0.5' }
+  syncMuteIcons()
+})
+if (mobileMute){
+  mobileMute.addEventListener('click', ()=>{
+    video.muted = !video.muted;
+    if (!video.muted && video.volume===0){ video.volume=0.5; volume.value='0.5' }
+    syncMuteIcons()
+  })
+}
+
+if (mobileAudio){
+  mobileAudio.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    audioMenu.classList.toggle('show');
+    qualityMenu.classList.remove('show');
+    speedMenu.classList.remove('show');
+    showControls();
+  })
+}
+if (mobileQuality){
+  mobileQuality.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    buildQualityMenu();
+    qualityMenu.classList.toggle('show');
+    audioMenu.classList.remove('show');
+    speedMenu.classList.remove('show');
+    showControls();
+  })
+}
+if (mobileSpeed){
+  mobileSpeed.addEventListener('click', (e)=>{
+    e.stopPropagation();
+    buildSpeedMenu();
+    speedMenu.classList.toggle('show');
+    audioMenu.classList.remove('show');
+    qualityMenu.classList.remove('show');
+    showControls();
+  })
+}
+if (mobileFullscreen){ mobileFullscreen.addEventListener('click', toggleFullscreen) }
+
 
 // Fullscreen
 function requestFullscreenElement(el){
