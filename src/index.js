@@ -701,9 +701,6 @@ initPlayer()
 // Center play toggle
 function togglePlay(){
   if(video.paused){
-    if (autoMuted && video.muted && !video.autoplayInitiated){
-      // keep muted until user explicitly unmutes
-    }
     const playPromise = video.play()
     if (playPromise && typeof playPromise.then === 'function'){
       playPromise.catch((err)=>{
@@ -728,6 +725,7 @@ video.addEventListener("play", ()=>{
     mobilePlayToggle.textContent = '⏸'
     mobilePlayToggle.classList.add('active')
   }
+  requestWakeLock().catch(()=>{})
 })
 video.addEventListener("pause", ()=>{
   centerPlay.style.display='flex'
@@ -735,6 +733,7 @@ video.addEventListener("pause", ()=>{
     mobilePlayToggle.textContent = '▶'
     mobilePlayToggle.classList.remove('active')
   }
+  releaseWakeLock().catch(()=>{})
 })
 // Attempt to lock to landscape on mobile when playback starts
 video.addEventListener('play', ()=>{ lockLandscapeIfPossible(); ensureMobileLandscape() })
@@ -763,11 +762,10 @@ video.addEventListener('loadedmetadata', ()=>{
     const autoplayAttempt = video.play()
     if (autoplayAttempt && typeof autoplayAttempt.then === 'function'){
       autoplayAttempt.then(()=>{
-        autoMuted = true
         showControls()
+        requestWakeLock().catch(()=>{})
       }).catch((err)=>{
         console.debug('Autoplay failed', err)
-        autoMuted = true
         showControls()
       })
     }
@@ -1022,7 +1020,7 @@ function showControls(){
   const autoHideDelay = 3000
   controlsHideTimer = setTimeout(() => {
     // keep controls visible if audio menu is open or when fullscreen toggles mid-timeout
-    if (audioMenu.classList.contains('show') || isFullscreenActive() || video.paused){
+    if (audioMenu.classList.contains('show') || video.paused){
       player.classList.add('show-controls')
       player.classList.remove('hide-cursor')
       return
@@ -1045,6 +1043,14 @@ document.addEventListener('keydown', (e)=>{
   if (e.key === 'ArrowRight'){ video.currentTime=Math.min(video.duration,video.currentTime+10) }
   if (e.key === 'f' || e.key === 'F'){ toggleFullscreen() }
   if (e.key === 'm' || e.key === 'M'){ video.muted=!video.muted; muteBtn.textContent = (video.muted?'🔇':'🔊') }
+})
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && !video.paused){
+    requestWakeLock().catch(()=>{})
+  } else {
+    releaseWakeLock().catch(()=>{})
+  }
 })
 
 // Spinner & buffering
