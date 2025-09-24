@@ -71,24 +71,46 @@ async function handleRequest(request) {
           "User-Agent": "Mozilla/5.0",
           "Accept": "application/json"
         }
-      }),
+      }).catch(() => null),
       fetch(nowowEndpoint, {
         headers: {
           "User-Agent": "Mozilla/5.0",
           "Accept": "application/json"
         }
-      })
+      }).catch(() => null)
     ])
 
-    if (!kstreamRes.ok) {
-      return new Response(`Upstream error from kstream (${kstreamRes.status})`, { status: 502 })
+    const parseJsonSafe = async (res) => {
+      if (!res) return null
+      try {
+        return await res.json()
+      } catch (_err) {
+        return null
+      }
     }
 
-    if (!nowowRes.ok) {
-      return new Response(`Upstream error from nowow (${nowowRes.status})`, { status: 502 })
+    let kstreamData = null
+    let nowowData = null
+
+    if (kstreamRes) {
+      if (kstreamRes.ok) {
+        kstreamData = await parseJsonSafe(kstreamRes)
+      } else if (kstreamRes.status === 404) {
+        kstreamData = { streams: [] }
+      } else {
+        return new Response(`Upstream error from kstream (${kstreamRes.status})`, { status: 502 })
+      }
     }
 
-    const [kstreamData, nowowData] = await Promise.all([kstreamRes.json(), nowowRes.json()])
+    if (nowowRes) {
+      if (nowowRes.ok) {
+        nowowData = await parseJsonSafe(nowowRes)
+      } else if (nowowRes.status === 404) {
+        nowowData = { streams: [] }
+      } else {
+        return new Response(`Upstream error from nowow (${nowowRes.status})`, { status: 502 })
+      }
+    }
 
     const kstreamStreams = Array.isArray(kstreamData?.streams) ? kstreamData.streams : []
     const nowowStreams = Array.isArray(nowowData?.streams) ? nowowData.streams : []
