@@ -1,8 +1,8 @@
-name = "hls-proxy-worker"           # Name of your Worker
-main = "src/index.js"               # Entry file for your Worker
-account_id = "f700a4562154ead08fcc94fed4e666de"  # Your Cloudflare account ID
-workers_dev = true                   # Deploy to a workers.dev subdomain
-compatibility_date = "2025-09-24"   # Keep this current
+name = "hls-proxy-worker"
+main = "src/index.js"
+account_id = "138ad40583b45130939f842df289df5532803"
+workers_dev = true
+compatibility_date = "2025-09-24"
 
 [build]
-command = ""                         # Leave empty if no build step
+command = ""
