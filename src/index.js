@@ -40,13 +40,15 @@ select{background:#222;color:#fff;border:none;padding:5px;border-radius:5px;}
 .skipBtn{position:absolute;top:50%;transform:translateY(-50%);font-size:36px;color:rgba(255,255,255,0.5);background:none;border:none;cursor:pointer;z-index:2;padding:0 20px;}
 #skipBack{left:10px;}
 #skipForward{right:10px;}
+#watermark{position:absolute;top:20px;right:20px;color:rgba(255,255,255,0.6);font-size:18px;font-weight:bold;text-shadow:1px 1px 3px #000;}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
 <body>
 <div id="player">
   <video id="video" poster="${poster}" autoplay></video>
-  <div id="overlay">${title}</div>
+  <div id="overlay">Your Watching:</div>
+  <div id="watermark">${title}</div>
   <button id="centerPlay">⏯</button>
   <button class="skipBtn" id="skipBack">⏪10s</button>
   <button class="skipBtn" id="skipForward">10s⏩</button>
@@ -87,17 +89,37 @@ if(Hls.isSupported()){
   hls.attachMedia(video)
 
   hls.on(Hls.Events.MANIFEST_PARSED,()=>{
-    // Audio tracks
-    if(hls.audioTracks.length>0){
-      audioSelect.innerHTML=''
-      hls.audioTracks.forEach((track,i)=>{
-        const opt=document.createElement('option')
-        opt.value=i
-        opt.text=track.name||("Audio "+(i+1))
-        audioSelect.appendChild(opt)
-      })
-    }
-    // Subtitle tracks
+    // Manual parsing of external audio tracks
+    const masterURL = hlsLink
+    fetch(masterURL).then(r=>r.text()).then(text=>{
+      const audioTracks=[]
+      const regex=/#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="[^"]+",LANGUAGE="([^"]+)",NAME="([^"]+)",DEFAULT=(YES|NO),URI="([^"]+)"/g
+      let match
+      while(match=regex.exec(text)){
+        audioTracks.push({lang:match[2],uri:match[4]})
+      }
+      if(audioTracks.length>0){
+        audioSelect.innerHTML=''
+        audioTracks.forEach((track,index)=>{
+          const opt=document.createElement('option')
+          opt.value=index
+          opt.text=track.lang
+          audioSelect.appendChild(opt)
+        })
+        // Switch track on selection
+        audioSelect.addEventListener("change",()=>{
+          const val=audioSelect.value
+          const selectedTrack=audioTracks[val]
+          if(selectedTrack){
+            hls.loadSource(selectedTrack.uri)
+            hls.attachMedia(video)
+            video.play()
+          }
+        })
+      }
+    })
+
+    // Inline subtitles
     if(hls.subtitleTracks.length>0){
       subtitleSelect.innerHTML='<option value="off">Off</option>'
       hls.subtitleTracks.forEach((track,i)=>{
@@ -108,9 +130,6 @@ if(Hls.isSupported()){
       })
     }
   })
-
-  audioSelect.addEventListener("change",()=>{hls.audioTrack=audioSelect.value==='default'?0:parseInt(audioSelect.value)})
-  subtitleSelect.addEventListener("change",()=>{hls.subtitleTrack=subtitleSelect.value==='off'?-1:parseInt(subtitleSelect.value)})
 }else if(video.canPlayType('application/vnd.apple.mpegurl')){
   video.src=hlsLink
 }
@@ -118,7 +137,6 @@ if(Hls.isSupported()){
 </body>
 </html>
 `
-
     return new Response(html, { headers: { "Content-Type": "text/html", "Access-Control-Allow-Origin": "*" } })
   } catch(err) {
     return new Response(err.toString(), { status:500 })
