@@ -2,45 +2,41 @@ addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request))
 })
 
-const API_URL = 'https://uembed.site/api/videos/' // replace with your actual endpoint
-
 async function handleRequest(request) {
   const url = new URL(request.url)
-  const tmdbId = url.searchParams.get('tmdbId') // use ?tmdbId=629542
+  const tmdbId = url.searchParams.get('tmdb') // expect ?tmdb=ID
 
   if (!tmdbId) {
-    return new Response('Missing ?tmdbId= parameter', { status: 400 })
+    return new Response('Missing ?tmdb= parameter', { status: 400 })
   }
 
   try {
-    // Fetch list of movies from backend
-    const res = await fetch(API_URL)
-    const movies = await res.json()
-
-    // Find the movie matching the TMDB ID
-    const movie = movies.find(m => m.tmdbId === tmdbId)
-
-    if (!movie || !movie.file) {
-      return new Response('Movie not found or no streaming link', { status: 404 })
-    }
-
-    // Proxy the HLS file
-    const hlsRes = await fetch(movie.file, {
+    // Fetch the HLS info from uembed
+    const res = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Cloudflare Worker HLS Proxy)'
       }
     })
 
-    const body = await hlsRes.arrayBuffer()
-    return new Response(body, {
-      status: hlsRes.status,
+    const data = await res.json() // parse JSON
+    if (!data || !data.file) {
+      return new Response('No streaming link found for this TMDB ID', { status: 404 })
+    }
+
+    // Return the HLS link
+    return new Response(JSON.stringify({
+      title: data.title,
+      thumbnail: data.thumbnail,
+      hls: data.file
+    }), {
+      status: 200,
       headers: {
-        'Content-Type': hlsRes.headers.get('Content-Type') || 'application/vnd.apple.mpegurl',
+        'Content-Type': 'application/json',
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS'
+        'Access-Control-Allow-Methods': 'GET, OPTIONS'
       }
     })
   } catch (err) {
-    return new Response(err.toString(), { status: 500 })
+    return new Response('Error fetching streaming link: ' + err.toString(), { status: 500 })
   }
 }
