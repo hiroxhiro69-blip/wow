@@ -478,18 +478,29 @@ pipBtn.addEventListener('click', async ()=>{
 })
 
 // Auto-hide controls like Netflix
+function isFullscreenActive(){
+  return Boolean(document.fullscreenElement || document.webkitFullscreenElement)
+}
+
 function showControls(){
   player.classList.add('show-controls')
   player.classList.remove('hide-cursor')
-  if (controlsHideTimer) clearTimeout(controlsHideTimer)
+  if (controlsHideTimer){
+    clearTimeout(controlsHideTimer)
+    controlsHideTimer = null
+  }
+  if (isFullscreenActive()){
+    return
+  }
   controlsHideTimer = setTimeout(()=>{
-    player.classList.remove('show-controls')
-    // keep controls visible if audio menu is open
-    if (audioMenu.classList.contains('show')){
+    // keep controls visible if audio menu is open or when fullscreen toggles mid-timeout
+    if (audioMenu.classList.contains('show') || isFullscreenActive()){
       player.classList.add('show-controls')
-    } else {
-      player.classList.add('hide-cursor')
+      player.classList.remove('hide-cursor')
+      return
     }
+    player.classList.remove('show-controls')
+    player.classList.add('hide-cursor')
   }, (window.innerWidth<=768 ? 3000 : 2000))
 }
 ['mousemove','touchstart','keydown'].forEach(evt=>{ player.addEventListener(evt, showControls) })
