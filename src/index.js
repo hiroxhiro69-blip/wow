@@ -13,7 +13,7 @@ async function handleRequest(request) {
   if (!tmdbId) return new Response("Missing ?tmdb= parameter", { status: 400 })
 
   try {
-    // Fetch video JSON info from uEmbed API
+    // Fetch JSON from uEmbed
     const apiRes = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`)
     const json = await apiRes.json()
 
@@ -24,20 +24,6 @@ async function handleRequest(request) {
     const videoLink = json[0].file
     const title = json[0].title
     const poster = json[0].thumbnail
-
-    // Fetch master M3U8 to parse audio tracks
-    const masterM3U8 = await fetchText(videoLink)
-    const audioLines = masterM3U8.split("\n").filter(l => l.startsWith("#EXT-X-MEDIA:TYPE=AUDIO"))
-    const audioTracks = audioLines.map((line, index) => {
-      const nameMatch = line.match(/NAME="([^"]+)"/)
-      const langMatch = line.match(/LANGUAGE="([^"]+)"/)
-      const uriMatch = line.match(/URI="([^"]+)"/)
-      return {
-        name: nameMatch ? nameMatch[1] : `Audio ${index+1}`,
-        lang: langMatch ? langMatch[1] : "",
-        uri: uriMatch ? new URL(uriMatch[1], videoLink).href : null
-      }
-    })
 
     const html = `
 <!DOCTYPE html>
@@ -50,7 +36,6 @@ async function handleRequest(request) {
 html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-serif; overflow:hidden; }
 #player { width:100%; height:100%; position:relative; }
 video { width:100%; height:100%; object-fit:cover; background:#000; }
-#audioPlayer { display:none; }
 #overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; }
 #overlay div { display:block; }
 #controls { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(0,0,0,0.5); opacity:0; transition:opacity 0.3s; }
@@ -69,8 +54,7 @@ select { background:#222; color:#fff; border:none; padding:5px; border-radius:5p
 <body>
 <div id="player">
   <video id="video" poster="${poster}" autoplay></video>
-  <audio id="audioPlayer" autoplay></audio>
-  <div id="overlay"><div>Your Watching</div><div>${title}</div></div>
+  <div id="overlay"><div>Now Watching</div><div>${title}</div></div>
   <button id="centerPlay">⏯</button>
   <button class="skipBtn" id="skipBack">⏪10s</button>
   <button class="skipBtn" id="skipForward">10s⏩</button>
@@ -83,7 +67,6 @@ select { background:#222; color:#fff; border:none; padding:5px; border-radius:5p
 </div>
 <script>
 const video = document.getElementById("video")
-const audioPlayer = document.getElementById("audioPlayer")
 const centerPlay = document.getElementById("centerPlay")
 const skipBack = document.getElementById("skipBack")
 const skipForward = document.getElementById("skipForward")
@@ -92,46 +75,47 @@ const audioSelect = document.getElementById("audioSelect")
 const progress = document.getElementById("progress")
 const progressContainer = document.getElementById("progressContainer")
 const hlsLink = "${videoLink}"
-const audioTracks = ${JSON.stringify(audioTracks)}
 
-// Initialize HLS for video
-let hlsVideo = null
+let hls = null
 if(Hls.isSupported()){
-  hlsVideo = new Hls()
-  hlsVideo.loadSource(hlsLink)
-  hlsVideo.attachMedia(video)
-} else if(video.canPlayType('application/vnd.apple.mpegurl')){
+  hls = new Hls()
+  hls.loadSource(hlsLink)
+  hls.attachMedia(video)
+
+  hls.on(Hls.Events.MANIFEST_PARSED, ()=>{
+    // Populate audio tracks
+    audioSelect.innerHTML = ''
+    hls.audioTracks.forEach((track,index)=>{
+      const option = document.createElement('option')
+      option.value = index
+      option.text = track.name || ("Audio "+(index+1)) + (track.lang ? ` (${track.lang})` : '')
+      audioSelect.appendChild(option)
+    })
+    audioSelect.selectedIndex = hls.audioTrack
+  })
+
+  // Change audio track dynamically
+  audioSelect.addEventListener('change', ()=>{
+    const val = parseInt(audioSelect.value)
+    if(!isNaN(val)) hls.audioTrack = val
+  })
+}else if(video.canPlayType('application/vnd.apple.mpegurl')){
   video.src = hlsLink
 }
 
-// Populate audio dropdown and set first track
-audioSelect.innerHTML = ''
-audioTracks.forEach((track,index)=>{
-  if(track.uri){
-    const option = document.createElement('option')
-    option.value = track.uri
-    option.text = track.name + (track.lang ? ' ('+track.lang+')':'')
-    audioSelect.appendChild(option)
-  }
-})
-if(audioTracks[0] && audioTracks[0].uri) audioPlayer.src = audioTracks[0].uri
-
-// Sync audio with video
-video.addEventListener('timeupdate', ()=>{ audioPlayer.currentTime = video.currentTime })
-video.addEventListener('play', ()=>{ audioPlayer.play() })
-video.addEventListener('pause', ()=>{ audioPlayer.pause() })
-
 // Center play toggle
-function togglePlay(){ 
-  if(video.paused){ video.play(); audioPlayer.play(); centerPlay.style.display='none' } 
-  else { video.pause(); audioPlayer.pause(); centerPlay.style.display='flex' } 
+function togglePlay(){
+  if(video.paused){ video.play(); centerPlay.style.display='none' }
+  else { video.pause(); centerPlay.style.display='flex' }
 }
 centerPlay.addEventListener("click", togglePlay)
 video.addEventListener("click", togglePlay)
+video.addEventListener("play", ()=>{ centerPlay.style.display='none' })
+video.addEventListener("pause", ()=>{ centerPlay.style.display='flex' })
 
 // Skip buttons
-skipBack.addEventListener("click", ()=>{ video.currentTime=Math.max(0,video.currentTime-10); audioPlayer.currentTime=video.currentTime })
-skipForward.addEventListener("click", ()=>{ video.currentTime=Math.min(video.duration,video.currentTime+10); audioPlayer.currentTime=video.currentTime })
+skipBack.addEventListener("click", ()=>{ video.currentTime=Math.max(0,video.currentTime-10) })
+skipForward.addEventListener("click", ()=>{ video.currentTime=Math.min(video.duration,video.currentTime+10) })
 
 // Fullscreen
 fullscreenBtn.addEventListener("click", ()=>{ video.requestFullscreen() })
@@ -142,18 +126,6 @@ progressContainer.addEventListener("click",(e)=>{
   const rect = progressContainer.getBoundingClientRect()
   const clickPos = (e.clientX - rect.left)/rect.width
   video.currentTime = clickPos * video.duration
-  audioPlayer.currentTime = video.currentTime
-})
-
-// Change audio track without reloading video
-audioSelect.addEventListener("change", ()=>{
-  const selectedURI = audioSelect.value
-  if(selectedURI){
-    const currTime = video.currentTime
-    audioPlayer.src = selectedURI
-    audioPlayer.currentTime = currTime
-    if(!video.paused) audioPlayer.play()
-  }
 })
 </script>
 </body>
