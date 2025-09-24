@@ -63,6 +63,22 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 .audio-item:hover { background:rgba(255,255,255,0.1); }
 .audio-item.active { color:#e50914; font-weight:600; }
 
+/* Quality & Speed menus */
+#qualityMenu, #speedMenu { position:absolute; right:16px; bottom:56px; background:rgba(20,20,20,0.95); color:#fff; border-radius:6px; padding:8px 0; min-width:180px; display:none; box-shadow:0 8px 24px rgba(0,0,0,0.5); }
+#qualityMenu.show, #speedMenu.show { display:block; }
+.menu-item { padding:8px 14px; cursor:pointer; font-size:14px; }
+.menu-item:hover { background:rgba(255,255,255,0.1); }
+.menu-item.active { color:#e50914; font-weight:600; }
+
+/* Spinner */
+#spinner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:48px; height:48px; border:4px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; display:none; }
+@keyframes spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
+
+/* Gesture zones */
+#zoneLeft, #zoneRight { position:absolute; top:0; bottom:0; width:35%; cursor:pointer; }
+#zoneLeft { left:0; }
+#zoneRight { right:0; }
+
 /* Left/right clusters */
 .controls-top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .controls-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -75,6 +91,9 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
   <video id="video" poster="${poster}" autoplay></video>
   <div id="overlay">${title}</div>
   <button id="centerPlay">⏯</button>
+  <div id="spinner"></div>
+  <div id="zoneLeft"></div>
+  <div id="zoneRight"></div>
   <div id="controls">
     <div id="seekContainer"><div id="seekProgress"></div></div>
     <div class="controls-bottom">
@@ -90,10 +109,15 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
           <input type="range" id="volume" min="0" max="1" step="0.05" value="1" />
         </div>
         <button class="btn" id="audioBtn">Audio ▾</button>
+        <button class="btn" id="qualityBtn">Quality ▾</button>
+        <button class="btn" id="speedBtn">Speed ▾</button>
+        <button class="btn" id="pipBtn">PiP</button>
         <button class="btn" id="fullscreen">⛶</button>
       </div>
     </div>
     <div id="audioMenu"></div>
+    <div id="qualityMenu"></div>
+    <div id="speedMenu"></div>
   </div>
 </div>
 <script>
@@ -106,6 +130,14 @@ const seekContainer = document.getElementById("seekContainer")
 const fullscreenBtn = document.getElementById("fullscreen")
 const audioBtn = document.getElementById("audioBtn")
 const audioMenu = document.getElementById("audioMenu")
+const qualityBtn = document.getElementById("qualityBtn")
+const qualityMenu = document.getElementById("qualityMenu")
+const speedBtn = document.getElementById("speedBtn")
+const speedMenu = document.getElementById("speedMenu")
+const pipBtn = document.getElementById("pipBtn")
+const spinner = document.getElementById("spinner")
+const zoneLeft = document.getElementById("zoneLeft")
+const zoneRight = document.getElementById("zoneRight")
 const muteBtn = document.getElementById("muteBtn")
 const volume = document.getElementById("volume")
 const playPause = document.getElementById("playPause")
@@ -115,6 +147,7 @@ const player = document.getElementById("player")
 let hls = null
 let audioSelect = null // virtual list source for Hls.js path
 let controlsHideTimer = null
+const storageKey = 'player:' + (${tmdbId?('"'+tmdbId+'"'):'"unknown"'})
 
 function renderAudioMenu(items, activeIndex){
   audioMenu.innerHTML = ''
@@ -157,6 +190,10 @@ function initPlayer(){
     hls = new Hls({
       enableWorker: true,
       capLevelToPlayerSize: false,
+      startLevel: -1,
+      maxBufferLength: 30,
+      maxLiveSyncPlaybackRate: 1.5,
+      liveDurationInfinity: true
       // Keep video rendition stable when switching audio by not forcing auto right after
     })
     hls.loadSource("${videoLink}")
@@ -271,7 +308,50 @@ audioBtn.addEventListener('click', (e)=>{
   audioMenu.classList.toggle('show')
   showControls()
 })
-document.addEventListener('click', ()=>{ audioMenu.classList.remove('show') })
+document.addEventListener('click', ()=>{ audioMenu.classList.remove('show'); qualityMenu.classList.remove('show'); speedMenu.classList.remove('show') })
+
+// Quality menu
+function buildQualityMenu(){
+  qualityMenu.innerHTML = ''
+  if (hls && hls.levels && hls.levels.length){
+    const auto = document.createElement('div'); auto.className='menu-item'; auto.textContent='Auto'; auto.dataset.level='-1'; qualityMenu.appendChild(auto)
+    hls.levels.forEach((lvl, i)=>{
+      const label = (lvl.height? (lvl.height+'p') : (Math.round((lvl.bitrate||0)/1000)+'kbps'))
+      const el = document.createElement('div'); el.className='menu-item'; el.textContent=label; el.dataset.level=String(i); qualityMenu.appendChild(el)
+    })
+    const active = hls.currentLevel
+    Array.from(qualityMenu.children).forEach((c)=>{ if (parseInt(c.dataset.level)===active) c.classList.add('active'); if(active===-1 && c.dataset.level==='-1') c.classList.add('active') })
+  } else {
+    const only = document.createElement('div'); only.className='menu-item active'; only.textContent='Auto'; qualityMenu.appendChild(only)
+  }
+}
+qualityBtn.addEventListener('click', (e)=>{ e.stopPropagation(); buildQualityMenu(); qualityMenu.classList.toggle('show'); speedMenu.classList.remove('show'); audioMenu.classList.remove('show'); showControls() })
+qualityMenu.addEventListener('click', (e)=>{
+  const t = e.target; if(!t || !t.classList || !t.classList.contains('menu-item')) return
+  const level = parseInt(t.dataset.level)
+  if (hls){ hls.currentLevel = level }
+  buildQualityMenu()
+})
+
+// Speed menu
+const speeds = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
+function buildSpeedMenu(){
+  speedMenu.innerHTML=''
+  const current = video.playbackRate
+  for (let i=0;i<speeds.length;i++){
+    const s = speeds[i]
+    const el = document.createElement('div'); el.className='menu-item'+(Math.abs(s-current)<0.001?' active':''); el.textContent = (s+'x'); el.dataset.speed=String(s); speedMenu.appendChild(el)
+  }
+}
+speedBtn.addEventListener('click',(e)=>{ e.stopPropagation(); buildSpeedMenu(); speedMenu.classList.toggle('show'); qualityMenu.classList.remove('show'); audioMenu.classList.remove('show'); showControls() })
+speedMenu.addEventListener('click',(e)=>{ const t=e.target; if(!t||!t.classList||!t.classList.contains('menu-item')) return; const s=parseFloat(t.dataset.speed); video.playbackRate=s; localStorage.setItem(storageKey+':speed', String(s)); buildSpeedMenu() })
+
+// PiP
+pipBtn.addEventListener('click', async ()=>{
+  try {
+    if (document.pictureInPictureElement){ await document.exitPictureInPicture() } else if (video.requestPictureInPicture){ await video.requestPictureInPicture() }
+  } catch(_e){}
+})
 
 // Auto-hide controls like Netflix
 function showControls(){
@@ -300,6 +380,32 @@ document.addEventListener('keydown', (e)=>{
   if (e.key === 'f' || e.key === 'F'){ toggleFullscreen() }
   if (e.key === 'm' || e.key === 'M'){ video.muted=!video.muted; muteBtn.textContent = (video.muted?'🔇':'🔊') }
 })
+
+// Spinner & buffering
+function showSpinner(){ spinner.style.display='block' }
+function hideSpinner(){ spinner.style.display='none' }
+video.addEventListener('waiting', showSpinner)
+video.addEventListener('stalled', showSpinner)
+video.addEventListener('playing', hideSpinner)
+video.addEventListener('canplay', hideSpinner)
+
+// Gestures: double-tap seek, dblclick fullscreen
+function dblSeek(dir){ video.currentTime = Math.max(0, Math.min(video.duration||Infinity, video.currentTime + (dir*10))) }
+zoneLeft.addEventListener('dblclick', ()=>{ dblSeek(-1) })
+zoneRight.addEventListener('dblclick', ()=>{ dblSeek(1) })
+video.addEventListener('dblclick', toggleFullscreen)
+
+// Persistence: volume, speed, position (per TMDB)
+const savedVol = parseFloat(localStorage.getItem(storageKey+':volume')||'1')
+if (!isNaN(savedVol)){ volume.value=String(savedVol); video.volume=savedVol; video.muted=(savedVol===0); muteBtn.textContent=(video.muted?'🔇':'🔊') }
+const savedSpd = parseFloat(localStorage.getItem(storageKey+':speed')||'1')
+if (!isNaN(savedSpd)){ video.playbackRate = savedSpd }
+const savedPos = parseFloat(localStorage.getItem(storageKey+':time')||'NaN')
+if (!isNaN(savedPos)){
+  video.addEventListener('loadedmetadata', ()=>{ if (savedPos>0 && savedPos < (video.duration||Infinity)-2){ video.currentTime = savedPos } })
+}
+setInterval(()=>{ if(!video.seeking && isFinite(video.currentTime)){ localStorage.setItem(storageKey+':time', String(video.currentTime)) } }, 3000)
+volume.addEventListener('change', ()=>{ localStorage.setItem(storageKey+':volume', String(video.volume)) })
 </script>
 </body>
 </html>
