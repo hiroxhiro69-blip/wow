@@ -115,7 +115,10 @@ async function handleRequest(request) {
     const kstreamStreams = Array.isArray(kstreamData?.streams) ? kstreamData.streams : []
     const nowowStreams = Array.isArray(nowowData?.streams) ? nowowData.streams : []
 
-    if (!kstreamStreams.length && !nowowStreams.length) {
+    const annotatedKstream = kstreamStreams.map((s) => ({ ...s, source: "kstream" }))
+    const annotatedNowow = nowowStreams.map((s) => ({ ...s, source: "nowow" }))
+
+    if (!annotatedKstream.length && !annotatedNowow.length) {
       return new Response("No streaming link found for this TMDB ID", { status: 404 })
     }
 
@@ -125,8 +128,8 @@ async function handleRequest(request) {
       return english || streams[0]
     }
 
-    const chosenKStream = kstreamStreams.length ? pickPreferredStream(kstreamStreams) : null
-    const chosenNowowStream = nowowStreams.length ? pickPreferredStream(nowowStreams) : null
+    const chosenKStream = annotatedKstream.length ? pickPreferredStream(annotatedKstream) : null
+    const chosenNowowStream = annotatedNowow.length ? pickPreferredStream(annotatedNowow) : null
 
     let chosenStream = null
     if (chosenNowowStream && chosenNowowStream.url) {
@@ -139,11 +142,25 @@ async function handleRequest(request) {
     streamHeaders = chosenStream?.headers || {}
     streamLanguage = chosenStream?.language || "Default"
 
-    streamVariants = [...kstreamStreams, ...nowowStreams].map((s, idx) => ({
+    const combinedStreams = (() => {
+      const order = [...annotatedNowow, ...annotatedKstream]
+      const seen = new Set()
+      const unique = []
+      for (const entry of order) {
+        if (!entry || !entry.url) continue
+        if (seen.has(entry.url)) continue
+        seen.add(entry.url)
+        unique.push(entry)
+      }
+      return unique
+    })()
+
+    streamVariants = combinedStreams.map((s, idx) => ({
       id: idx,
       language: s.language || `Stream ${idx + 1}`,
       url: s.url,
-      headers: s.headers || {}
+      headers: s.headers || {},
+      source: s.source || "unknown"
     }))
 
     title = kstreamData?.title || nowowData?.title || `TMDB #${tmdbId}`
@@ -304,47 +321,82 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
   </div>
 </div>
 <script>
-const video = document.getElementById("video")
-const centerPlay = document.getElementById("centerPlay")
-const skipBack = document.getElementById("skipBack")
-const skipForward = document.getElementById("skipForward")
-const seekProgress = document.getElementById("seekProgress")
-const seekContainer = document.getElementById("seekContainer")
-const fullscreenBtn = document.getElementById("fullscreen")
-const audioBtn = document.getElementById("audioBtn")
-const audioMenu = document.getElementById("audioMenu")
-const qualityBtn = document.getElementById("qualityBtn")
-const qualityMenu = document.getElementById("qualityMenu")
-const speedBtn = document.getElementById("speedBtn")
-const speedMenu = document.getElementById("speedMenu")
-const pipBtn = document.getElementById("pipBtn")
-const spinner = document.getElementById("spinner")
-const zoneLeft = document.getElementById("zoneLeft")
-const zoneRight = document.getElementById("zoneRight")
-const seekBadgeLeft = document.getElementById("seekBadgeLeft")
-const seekBadgeRight = document.getElementById("seekBadgeRight")
-const rotateOverlay = document.getElementById("rotateOverlay")
-const muteBtn = document.getElementById("muteBtn")
-const volume = document.getElementById("volume")
-const playPause = document.getElementById("playPause")
-const timeLabel = document.getElementById("timeLabel")
-const player = document.getElementById("player")
-const body = document.body
-const streamHeaders = ${JSON.stringify(streamHeaders)}
-const streamVariants = ${JSON.stringify(streamVariants)}
-const streamLanguage = ${JSON.stringify(streamLanguage)}
-const storageKey = ${JSON.stringify(storageKey)}
+const video = document.getElementById("video");
+const centerPlay = document.getElementById("centerPlay");
+const skipBack = document.getElementById("skipBack");
+const skipForward = document.getElementById("skipForward");
+const seekProgress = document.getElementById("seekProgress");
+const seekContainer = document.getElementById("seekContainer");
+const fullscreenBtn = document.getElementById("fullscreen");
+const audioBtn = document.getElementById("audioBtn");
+const audioMenu = document.getElementById("audioMenu");
+const qualityBtn = document.getElementById("qualityBtn");
+const qualityMenu = document.getElementById("qualityMenu");
+const speedBtn = document.getElementById("speedBtn");
+const speedMenu = document.getElementById("speedMenu");
+const pipBtn = document.getElementById("pipBtn");
+const spinner = document.getElementById("spinner");
+const zoneLeft = document.getElementById("zoneLeft");
+const zoneRight = document.getElementById("zoneRight");
+const seekBadgeLeft = document.getElementById("seekBadgeLeft");
+const seekBadgeRight = document.getElementById("seekBadgeRight");
+const rotateOverlay = document.getElementById("rotateOverlay");
+const muteBtn = document.getElementById("muteBtn");
+const volume = document.getElementById("volume");
+const playPause = document.getElementById("playPause");
+const timeLabel = document.getElementById("timeLabel");
+const player = document.getElementById("player");
+const body = document.body;
+const initialStreamHeaders = ${JSON.stringify(streamHeaders)};
+const streamVariants = ${JSON.stringify(streamVariants)};
+const streamLanguage = ${JSON.stringify(streamLanguage)};
+const storageKey = ${JSON.stringify(storageKey)};
+const initialStreamUrl = ${JSON.stringify(videoLink)};
+
+let currentStreamHeaders = initialStreamHeaders || {};
+let currentStreamUrl = initialStreamUrl;
+let activeStreamIndex = -1;
+
+if (Array.isArray(streamVariants) && streamVariants.length){
+  let savedVariantIndex = -1;
+  try {
+    const raw = localStorage.getItem(storageKey + ':variant');
+    if (raw !== null){
+      const parsed = parseInt(raw, 10);
+      if (!Number.isNaN(parsed) && streamVariants[parsed]){
+        savedVariantIndex = parsed;
+      }
+    }
+  } catch(_e){}
+
+  if (savedVariantIndex >= 0){
+    activeStreamIndex = savedVariantIndex;
+  } else {
+    activeStreamIndex = streamVariants.findIndex(v => v && v.url === initialStreamUrl);
+    if (activeStreamIndex < 0) activeStreamIndex = 0;
+  }
+
+  const selectedVariant = streamVariants[activeStreamIndex];
+  if (selectedVariant && selectedVariant.url){
+    currentStreamUrl = selectedVariant.url;
+  }
+  if (selectedVariant && selectedVariant.headers){
+    currentStreamHeaders = selectedVariant.headers;
+  }
+
+  buildCustomStreamMenu();
+}
 
 // Ensure inline playback on mobile browsers and keep custom controls active
-video.setAttribute('playsinline', 'true')
-video.setAttribute('webkit-playsinline', 'true')
-video.setAttribute('x5-playsinline', 'true')
-video.playsInline = true
-video.controls = false
+video.setAttribute('playsinline', 'true');
+video.setAttribute('webkit-playsinline', 'true');
+video.setAttribute('x5-playsinline', 'true');
+video.playsInline = true;
+video.controls = false;
 
-let hls = null
-let audioSelect = null // virtual list source for Hls.js path
-let controlsHideTimer = null
+let hls = null;
+let audioSelect = null;
+let controlsHideTimer = null;
 
 // Mobile landscape helper
 function isMobileCoarse(){
@@ -368,39 +420,94 @@ function updateOrientationUI(){
 }
 
 function renderAudioMenu(items, activeIndex){
-  audioMenu.innerHTML = ''
+  audioMenu.innerHTML = '';
   for (let i = 0; i < items.length; i++){
-    const div = document.createElement('div')
-    div.className = 'audio-item' + (i === activeIndex ? ' active' : '')
-    div.dataset.index = String(i)
-    div.textContent = items[i]
-    audioMenu.appendChild(div)
+    const div = document.createElement('div');
+    div.className = 'audio-item' + (i === activeIndex ? ' active' : '');
+    div.dataset.index = String(i);
+    const primary = '<strong>' + items[i].label + '</strong>';
+    const meta = items[i].meta ? '<div style="font-size:12px;color:#888;">' + items[i].meta + '</div>' : '';
+    div.innerHTML = primary + meta;
+    audioMenu.appendChild(div);
   }
+}
+
+function buildCustomStreamMenu(){
+  if (!Array.isArray(streamVariants) || !streamVariants.length){
+    audioMenu.innerHTML = '<div class="audio-item active">Default</div>';
+    return;
+  }
+  const items = streamVariants.map((variant) => ({
+    label: variant.language || 'Variant',
+    meta: variant.source ? `Source: ${variant.source}` : ''
+  }));
+  let highlightIndex = activeStreamIndex;
+  if (highlightIndex < 0) highlightIndex = 0;
+  if (highlightIndex >= items.length) highlightIndex = items.length - 1;
+  renderAudioMenu(items, highlightIndex);
 }
 
 function buildAudioListFromHls(){
-  const labels = []
-  let selectedIndex = -1
+  if (Array.isArray(streamVariants) && streamVariants.length){
+    buildCustomStreamMenu();
+    return;
+  }
+  const labels = [];
+  let selectedIndex = -1;
   hls.audioTracks.forEach((track, index) => {
-    const label = (track.name || track.lang || ('Track ' + (index+1))) + (track.lang && (track.name||'') !== track.lang ? ' ('+track.lang+')' : '')
-    labels.push(label)
-    if (track.default) selectedIndex = index
-  })
-  if (selectedIndex === -1) selectedIndex = hls.audioTrack || 0
-  renderAudioMenu(labels, selectedIndex)
+    const label = (track.name || track.lang || ('Track ' + (index+1))) + (track.lang && (track.name||'') !== track.lang ? ' ('+track.lang+')' : '');
+    labels.push({ label, meta: '' });
+    if (track.default) selectedIndex = index;
+  });
+  if (selectedIndex === -1) selectedIndex = hls.audioTrack || 0;
+  renderAudioMenu(labels, selectedIndex);
 }
 
 function buildAudioListFromNative(){
-  const aTracks = video.audioTracks || []
-  const labels = []
-  let active = 0
-  for (let i = 0; i < aTracks.length; i++){
-    const t = aTracks[i]
-    const label = (t.label || t.language || ('Track ' + (i+1))) + (t.language && (t.label||'') !== t.language ? ' ('+t.language+')' : '')
-    labels.push(label)
-    if (t.enabled) active = i
+  if (Array.isArray(streamVariants) && streamVariants.length){
+    buildCustomStreamMenu();
+    return;
   }
-  renderAudioMenu(labels, active)
+  const aTracks = video.audioTracks || [];
+  const items = [];
+  let active = 0;
+  for (let i = 0; i < aTracks.length; i++){
+    const t = aTracks[i];
+    const label = (t.label || t.language || ('Track ' + (i+1))) + (t.language && (t.label||'') !== t.language ? ' ('+t.language+')' : '');
+    items.push({ label, meta: '' });
+    if (t.enabled) active = i;
+  }
+  renderAudioMenu(items, active);
+}
+
+function switchStreamVariant(index){
+  if (!Array.isArray(streamVariants) || !streamVariants[index]) return
+  const variant = streamVariants[index];
+  activeStreamIndex = index;
+  currentStreamUrl = variant.url || currentStreamUrl;
+  currentStreamHeaders = variant.headers || {};
+  try { localStorage.setItem(storageKey + ':variant', String(index)) } catch(_e){}
+  showSpinner();
+  const resumeAfter = !video.paused;
+  if (hls){
+    hls.loadSource(currentStreamUrl || initialStreamUrl);
+    if (hls.media !== video){
+      hls.attachMedia(video);
+    }
+    if (resumeAfter){
+      const onParsed = () => {
+        video.play().catch(()=>{});
+        hls.off(Hls.Events.MANIFEST_PARSED, onParsed);
+      };
+      hls.on(Hls.Events.MANIFEST_PARSED, onParsed);
+    }
+  } else {
+    const startPlayback = resumeAfter;
+    video.src = currentStreamUrl || initialStreamUrl;
+    if (startPlayback){ video.play().catch(()=>{}); }
+  }
+  buildCustomStreamMenu();
+  audioMenu.classList.remove('show');
 }
 
 function initPlayer(){
@@ -412,9 +519,10 @@ function initPlayer(){
       maxBufferLength: 30,
       maxLiveSyncPlaybackRate: 1.5,
       liveDurationInfinity: true,
-      xhrSetup: function(xhr, url){
+      // Keep video rendition stable when switching audio by not forcing auto right after
+      xhrSetup: function(xhr){
         xhr.withCredentials = false
-        const headers = ${JSON.stringify(streamHeaders)}
+        const headers = currentStreamHeaders || {}
         if (headers){
           Object.keys(headers).forEach(key => {
             const value = headers[key]
@@ -422,9 +530,8 @@ function initPlayer(){
           })
         }
       }
-      // Keep video rendition stable when switching audio by not forcing auto right after
     })
-hls.loadSource("${videoLink}")
+hls.loadSource(currentStreamUrl || initialStreamUrl)
 hls.attachMedia(video)
 
 hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -444,9 +551,13 @@ hls.on(Hls.Events.MANIFEST_PARSED, () => {
     })
 
     audioMenu.addEventListener('click', (e) => {
-      const target = e.target
-      if (!target || !target.classList || !target.classList.contains('audio-item')) return
-      const id = parseInt(target.dataset.index)
+      const item = e.target && e.target.closest ? e.target.closest('.audio-item') : null
+      if (!item) return
+      const id = parseInt(item.dataset.index, 10)
+      if (Array.isArray(streamVariants) && streamVariants.length){
+        switchStreamVariant(id)
+        return
+      }
       const lockedLevel = hls.currentLevel
       hls.audioTrack = id
       if (lockedLevel !== undefined && lockedLevel !== null && lockedLevel >= 0){
@@ -457,14 +568,18 @@ hls.on(Hls.Events.MANIFEST_PARSED, () => {
     })
   } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
     // Safari / iOS: use native HLS
-    video.src = "${videoLink}"
+    video.src = currentStreamUrl || initialStreamUrl
     video.addEventListener('loadedmetadata', () => {
       buildAudioListFromNative()
     })
     audioMenu.addEventListener('click', (e) => {
-      const target = e.target
-      if (!target || !target.classList || !target.classList.contains('audio-item')) return
-      const idx = parseInt(target.dataset.index)
+      const item = e.target && e.target.closest ? e.target.closest('.audio-item') : null
+      if (!item) return
+      const idx = parseInt(item.dataset.index, 10)
+      if (Array.isArray(streamVariants) && streamVariants.length){
+        switchStreamVariant(idx)
+        return
+      }
       const aTracks = video.audioTracks || []
       for (let i = 0; i < aTracks.length; i++){
         aTracks[i].enabled = (i === idx)
@@ -474,7 +589,7 @@ hls.on(Hls.Events.MANIFEST_PARSED, () => {
     })
   } else {
     // Fallback: try setting src anyway
-    video.src = "${videoLink}"
+    video.src = currentStreamUrl || initialStreamUrl
   }
 }
 
