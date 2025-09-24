@@ -30,11 +30,9 @@ async function handleRequest(request) {
     const audioTracks = audioLines.map((line, index) => {
       const nameMatch = line.match(/NAME="([^"]+)"/)
       const langMatch = line.match(/LANGUAGE="([^"]+)"/)
-      const uriMatch = line.match(/URI="([^"]+)"/)
       return {
         name: nameMatch ? nameMatch[1] : `Audio ${index+1}`,
         lang: langMatch ? langMatch[1] : "",
-        uri: uriMatch ? new URL(uriMatch[1], videoLink).href : null
       }
     })
 
@@ -48,8 +46,7 @@ async function handleRequest(request) {
 <style>
 html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-serif; overflow:hidden; }
 #player { width:100%; height:100%; position:relative; }
-video, audio { width:100%; height:100%; object-fit:cover; background:#000; position:absolute; top:0; left:0; }
-#audioPlayer { pointer-events:none; }
+video { width:100%; height:100%; object-fit:cover; background:#000; }
 #overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; }
 #overlay div { display:block; }
 #controls { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(0,0,0,0.5); opacity:0; transition:opacity 0.3s; }
@@ -67,8 +64,7 @@ select { background:#222; color:#fff; border:none; padding:5px; border-radius:5p
 </head>
 <body>
 <div id="player">
-  <video id="video" poster="${poster}" autoplay></video>
-  <audio id="audioPlayer" autoplay></audio>
+  <video id="video" poster="${poster}" autoplay controls></video>
   <div id="overlay"><div>Your Watching</div><div>${title}</div></div>
   <button id="centerPlay">⏯</button>
   <button class="skipBtn" id="skipBack">⏪10s</button>
@@ -76,13 +72,12 @@ select { background:#222; color:#fff; border:none; padding:5px; border-radius:5p
   <div id="progressContainer"><div id="progress"></div></div>
   <div id="controls">
     <label>Audio:</label>
-    <select id="audioSelect"><option value="">Loading...</option></select>
+    <select id="audioSelect"><option>Loading...</option></select>
     <button class="btn" id="fullscreen">⛶</button>
   </div>
 </div>
 <script>
 const video = document.getElementById("video")
-const audioPlayer = document.getElementById("audioPlayer")
 const centerPlay = document.getElementById("centerPlay")
 const skipBack = document.getElementById("skipBack")
 const skipForward = document.getElementById("skipForward")
@@ -93,52 +88,32 @@ const progressContainer = document.getElementById("progressContainer")
 const hlsLink = "${videoLink}"
 const audioTracks = ${JSON.stringify(audioTracks)}
 
-// Initialize HLS for video
-let hlsVideo = null
+let hls = null
 if(Hls.isSupported()){
-  hlsVideo = new Hls()
-  hlsVideo.loadSource(hlsLink)
-  hlsVideo.attachMedia(video)
+  hls = new Hls()
+  hls.loadSource(hlsLink)
+  hls.attachMedia(video)
+
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    // Populate audio dropdown
+    audioSelect.innerHTML = ''
+    hls.audioTracks.forEach((track, index) => {
+      const option = document.createElement('option')
+      option.value = index
+      option.text = track.name || `Audio ${index+1}`
+      audioSelect.appendChild(option)
+    })
+  })
+
+  audioSelect.addEventListener('change', () => {
+    const index = parseInt(audioSelect.value)
+    if(!isNaN(index)){
+      hls.audioTrack = index
+    }
+  })
 } else if(video.canPlayType('application/vnd.apple.mpegurl')){
   video.src = hlsLink
 }
-
-// Populate audio dropdown and set first track
-audioSelect.innerHTML = ''
-audioTracks.forEach((track,index)=>{
-  if(track.uri){
-    const option = document.createElement('option')
-    option.value = track.uri
-    option.text = track.name + (track.lang ? ' ('+track.lang+')':'')
-    audioSelect.appendChild(option)
-  }
-})
-if(audioTracks[0] && audioTracks[0].uri) audioPlayer.src = audioTracks[0].uri
-
-// Sync audio with video
-function syncAudio(){
-  audioPlayer.currentTime = video.currentTime
-  if(!video.paused) audioPlayer.play()
-  else audioPlayer.pause()
-}
-video.addEventListener('timeupdate', ()=>{ audioPlayer.currentTime = video.currentTime })
-
-// Center play toggle
-function togglePlay(){ 
-  if(video.paused){ video.play(); audioPlayer.play(); centerPlay.style.display='none' } 
-  else { video.pause(); audioPlayer.pause(); centerPlay.style.display='flex' } 
-}
-centerPlay.addEventListener("click", togglePlay)
-video.addEventListener("click", togglePlay)
-video.addEventListener("play", ()=>{ audioPlayer.play(); centerPlay.style.display='none' })
-video.addEventListener("pause", ()=>{ audioPlayer.pause(); centerPlay.style.display='flex' })
-
-// Skip buttons
-skipBack.addEventListener("click", ()=>{ video.currentTime=Math.max(0,video.currentTime-10); audioPlayer.currentTime=video.currentTime })
-skipForward.addEventListener("click", ()=>{ video.currentTime=Math.min(video.duration,video.currentTime+10); audioPlayer.currentTime=video.currentTime })
-
-// Fullscreen
-fullscreenBtn.addEventListener("click", ()=>{ video.requestFullscreen() })
 
 // Progress bar
 video.addEventListener("timeupdate", ()=>{ progress.style.width = ((video.currentTime/video.duration)*100)+'%' })
@@ -146,19 +121,21 @@ progressContainer.addEventListener("click",(e)=>{
   const rect = progressContainer.getBoundingClientRect()
   const clickPos = (e.clientX - rect.left)/rect.width
   video.currentTime = clickPos * video.duration
-  audioPlayer.currentTime = video.currentTime
 })
 
-// Change audio track
-audioSelect.addEventListener("change", ()=>{
-  const selectedURI = audioSelect.value
-  if(selectedURI){
-    const currTime = video.currentTime
-    audioPlayer.src = selectedURI
-    audioPlayer.currentTime = currTime
-    if(!video.paused) audioPlayer.play()
-  }
-})
+// Center play toggle
+function togglePlay(){ if(video.paused){ video.play(); centerPlay.style.display='none' } else { video.pause(); centerPlay.style.display='flex' } }
+centerPlay.addEventListener("click", togglePlay)
+video.addEventListener("click", togglePlay)
+video.addEventListener("play", ()=>{ centerPlay.style.display='none' })
+video.addEventListener("pause", ()=>{ centerPlay.style.display='flex' })
+
+// Skip buttons
+skipBack.addEventListener("click", ()=>{ video.currentTime=Math.max(0,video.currentTime-10) })
+skipForward.addEventListener("click", ()=>{ video.currentTime=Math.min(video.duration,video.currentTime+10) })
+
+// Fullscreen
+fullscreenBtn.addEventListener("click", ()=>{ video.requestFullscreen() })
 </script>
 </body>
 </html>
