@@ -24,7 +24,6 @@ async function handleRequest(request) {
     const title = json[0].title
     const poster = json[0].thumbnail
 
-    // Fetch master M3U8 to parse audio tracks
     const masterM3U8 = await fetchText(videoLink)
     const audioLines = masterM3U8.split("\n").filter(l => l.startsWith("#EXT-X-MEDIA:TYPE=AUDIO"))
     const audioTracks = audioLines.map((line, index) => {
@@ -96,8 +95,9 @@ audioTracks.forEach((track, index) => {
   if(track.uri){
     const option = document.createElement('option')
     option.value = track.uri
-    // FIX: parentheses around fallback for Wrangler
-    option.text = (track.name || ("Audio " + (index+1))) + (track.lang ? ` (${track.lang})` : '')
+    // Correct concatenation to avoid Wrangler error
+    let nameText = track.name ? track.name : 'Audio ' + (index+1)
+    option.text = nameText + (track.lang ? ' (' + track.lang + ')' : '')
     audioSelect.appendChild(option)
   }
 })
