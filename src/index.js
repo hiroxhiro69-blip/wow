@@ -14,10 +14,10 @@ async function handleRequest(request) {
 
   try {
     // Fetch JSON from uEmbed
-    const apiRes = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`)
+    const apiRes = await fetch("https://uembed.site/api/videos/tmdb?id=" + tmdbId)
     const json = await apiRes.json()
 
-    if (!json?.length || !json[0].file) {
+    if (!json || !json.length || !json[0].file) {
       return new Response("No streaming link found for this TMDB ID", { status: 404 })
     }
 
@@ -79,7 +79,7 @@ const progress = document.getElementById("progress")
 const progressContainer = document.getElementById("progressContainer")
 const hlsLink = "${videoLink}"
 
-// Toggle play/pause center button
+// Play/pause toggle
 function togglePlay(){ if(video.paused){ video.play(); centerPlay.style.display='none' } else { video.pause(); centerPlay.style.display='flex' } }
 centerPlay.addEventListener("click", togglePlay)
 video.addEventListener("click", togglePlay)
@@ -110,23 +110,27 @@ if(Hls.isSupported()){
     // Populate audio tracks
     if(hls.audioTracks.length>0){
       audioSelect.innerHTML = ''
-      hls.audioTracks.forEach((track,index)=>{
+      for(let i=0; i<hls.audioTracks.length; i++){
+        let track = hls.audioTracks[i]
+        let text = track.name
+        if(track.lang && track.lang !== "") text = track.name + " (" + track.lang + ")"
         const option = document.createElement('option')
-        option.value = index
-        option.text = track.name + (track.lang ? ` (${track.lang})` : "")
+        option.value = i
+        option.text = text
         audioSelect.appendChild(option)
-      })
+      }
     }
 
     // Populate subtitles
     if(hls.subtitleTracks.length>0){
       subtitleSelect.innerHTML = '<option value="off">Off</option>'
-      hls.subtitleTracks.forEach((track,index)=>{
+      for(let i=0; i<hls.subtitleTracks.length; i++){
+        let track = hls.subtitleTracks[i]
         const option = document.createElement('option')
-        option.value = index
-        option.text = track.name || ("Subtitle " + (index+1))
+        option.value = i
+        option.text = track.name || ("Subtitle " + (i+1))
         subtitleSelect.appendChild(option)
-      })
+      }
     }
   })
 
