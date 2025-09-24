@@ -11,7 +11,7 @@ async function handleRequest(request) {
   }
 
   try {
-    // Fetch metadata from uembed
+    // Fetch HLS link from uembed
     const uembedRes = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`)
     const data = await uembedRes.json()
 
@@ -21,40 +21,34 @@ async function handleRequest(request) {
 
     const streamUrl = data[0].file
 
-    // If ?player=1 is provided, serve HTML player
-    if (url.searchParams.get('player') === '1') {
-      const html = `
-      <!DOCTYPE html>
-      <html lang="en">
-      <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>${data[0].title}</title>
-      </head>
-      <body style="margin:0; background:black; display:flex; justify-content:center; align-items:center; height:100vh;">
-        <video controls autoplay style="width:90%; max-width:1000px;">
-          <source src="${streamUrl}" type="application/vnd.apple.mpegurl">
-          Your browser does not support HLS.
-        </video>
-      </body>
-      </html>`
-      return new Response(html, { headers: { 'Content-Type': 'text/html' } })
-    }
+    // Serve HTML page with <video> tag
+    const html = `
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>${data[0].title}</title>
+    </head>
+    <body style="margin:0; background:black; display:flex; justify-content:center; align-items:center; height:100vh;">
+      <video id="player" controls autoplay style="width:90%; max-width:1000px;">
+        <source src="${streamUrl}" type="application/vnd.apple.mpegurl">
+        Your browser does not support HLS.
+      </video>
+      <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
+      <script>
+        const video = document.getElementById('player')
+        if(Hls.isSupported()) {
+          const hls = new Hls()
+          hls.loadSource("${streamUrl}")
+          hls.attachMedia(video)
+        }
+      </script>
+    </body>
+    </html>
+    `
 
-    // Otherwise, return raw HLS stream
-    const res = await fetch(streamUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Cloudflare Worker HLS Proxy)' }
-    })
-
-    const body = await res.arrayBuffer()
-    return new Response(body, {
-      status: res.status,
-      headers: {
-        'Content-Type': res.headers.get('Content-Type') || 'application/vnd.apple.mpegurl',
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'GET, HEAD, OPTIONS'
-      }
-    })
+    return new Response(html, { headers: { 'Content-Type': 'text/html' } })
 
   } catch (err) {
     return new Response(err.toString(), { status: 500 })
