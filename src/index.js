@@ -701,13 +701,23 @@ initPlayer()
 // Center play toggle
 function togglePlay(){
   if(video.paused){
-    video.play();
-    centerPlay.style.display='none';
-    if (mobilePlayToggle){ mobilePlayToggle.textContent = '⏸'; mobilePlayToggle.classList.add('active'); }
+    if (autoMuted && video.muted && !video.autoplayInitiated){
+      // keep muted until user explicitly unmutes
+    }
+    const playPromise = video.play()
+    if (playPromise && typeof playPromise.then === 'function'){
+      playPromise.catch((err)=>{
+        console.debug('Video play blocked', err)
+        showControls()
+        centerPlay.style.display='flex'
+        if (mobilePlayToggle){
+          mobilePlayToggle.textContent = '▶'
+          mobilePlayToggle.classList.remove('active')
+        }
+      })
+    }
   } else {
     video.pause();
-    centerPlay.style.display='flex';
-    if (mobilePlayToggle){ mobilePlayToggle.textContent = '▶'; mobilePlayToggle.classList.remove('active'); }
   }
 }
 centerPlay.addEventListener("click", togglePlay)
@@ -748,6 +758,21 @@ function updateTime(){
 }
 video.addEventListener('timeupdate', updateTime)
 video.addEventListener('loadedmetadata', updateTime)
+video.addEventListener('loadedmetadata', ()=>{
+  setTimeout(()=>{
+    const autoplayAttempt = video.play()
+    if (autoplayAttempt && typeof autoplayAttempt.then === 'function'){
+      autoplayAttempt.then(()=>{
+        autoMuted = true
+        showControls()
+      }).catch((err)=>{
+        console.debug('Autoplay failed', err)
+        autoMuted = true
+        showControls()
+      })
+    }
+  }, 150)
+})
 seekContainer.addEventListener('click', (e)=>{
   const rect = seekContainer.getBoundingClientRect()
   const clickPos = (e.clientX - rect.left)/rect.width
@@ -1009,6 +1034,8 @@ function showControls(){
     player.classList.add('hide-cursor')
   }, autoHideDelay)
 }
+
+document.addEventListener('keydown', (e)=>{
   if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return
   if (e.code === 'Space'){ e.preventDefault(); togglePlay() }
   if (e.key === 'ArrowLeft'){ video.currentTime=Math.max(0,video.currentTime-10) }
