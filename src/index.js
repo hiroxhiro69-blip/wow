@@ -717,6 +717,13 @@ video.addEventListener("pause", ()=>{ centerPlay.style.display='flex' })
 // Attempt to lock to landscape on mobile when playback starts
 video.addEventListener('play', ()=>{ lockLandscapeIfPossible(); ensureMobileLandscape() })
 
+if (mobilePlayToggle){
+  mobilePlayToggle.addEventListener('click', (e)=>{
+    e.stopPropagation()
+    togglePlay()
+  })
+}
+
 // Time/seek bar
 function fmtTime(t){ if(!isFinite(t)) return '00:00'; const h=Math.floor(t/3600); const m=Math.floor((t%3600)/60); const s=Math.floor(t%60); return (h>0?(h+':'):'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0') }
 function updateTime(){
