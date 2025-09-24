@@ -9,6 +9,7 @@ async function fetchText(url) {
 
 async function handleRequest(request) {
   const url = new URL(request.url)
+  const path = url.pathname
   // Allow only requests coming from the specified site
   const allowedOrigin = 'https://hiroxstream.pages.dev'
   const origin = request.headers.get('Origin') || ''
@@ -32,12 +33,69 @@ async function handleRequest(request) {
 <body>
   <div class="card">
     <h1>Offline</h1>
-    <p>This content is only available on hiroxstream.pages.dev</p>
   </div>
 </body>
 </html>`
     return new Response(offlineHtml, { status: 403, headers: { 'Content-Type': 'text/html' } })
   }
+
+  if (path === '/manifest.webmanifest') {
+    const manifest = {
+      name: 'HiroX Stream Player',
+      short_name: 'HiroXStream',
+      description: 'Stream HiroX content with a mobile-first player experience.',
+      start_url: '/',
+      scope: '/',
+      display: 'standalone',
+      background_color: '#000000',
+      theme_color: '#000000',
+      lang: 'en',
+      icons: [
+        {
+          src: 'https://hiroxstream.pages.dev/android-chrome-192x192.png',
+          sizes: '192x192',
+          type: 'image/png'
+        },
+        {
+          src: 'https://hiroxstream.pages.dev/android-chrome-512x512.png',
+          sizes: '512x512',
+          type: 'image/png'
+        }
+      ]
+    }
+    return new Response(JSON.stringify(manifest, null, 2), {
+      headers: {
+        'Content-Type': 'application/manifest+json',
+        'Cache-Control': 'public, max-age=0, must-revalidate'
+      }
+    })
+  }
+
+  if (path === '/sw.js') {
+    const swScript = `const CACHE_VERSION = 'hiroxstream-shell-v1';
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting());
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  if (event.request.mode === 'navigate') {
+    event.respondWith(fetch(event.request).catch(() => new Response('You appear to be offline.', {
+      headers: { 'Content-Type': 'text/plain' }
+    })));
+  }
+});
+`
+    return new Response(swScript, {
+      headers: {
+        'Content-Type': 'application/javascript',
+        'Cache-Control': 'public, max-age=0, must-revalidate'
+      }
+    })
+  }
+
   const tmdbId = url.searchParams.get("tmdb")
   if (!tmdbId) return new Response("Missing ?tmdb= parameter", { status: 400 })
 
@@ -190,6 +248,10 @@ async function handleRequest(request) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>${title}</title>
 <style>
 html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-serif; overflow:hidden; }
