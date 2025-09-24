@@ -24,19 +24,6 @@ async function handleRequest(request) {
     const title = json[0].title
     const poster = json[0].thumbnail
 
-    const masterM3U8 = await fetchText(videoLink)
-    const audioLines = masterM3U8.split("\n").filter(l => l.startsWith("#EXT-X-MEDIA:TYPE=AUDIO"))
-    const audioTracks = audioLines.map((line, index) => {
-      const nameMatch = line.match(/NAME="([^"]+)"/)
-      const langMatch = line.match(/LANGUAGE="([^"]+)"/)
-      const uriMatch = line.match(/URI="([^"]+)"/)
-      return {
-        name: nameMatch ? nameMatch[1] : 'Audio ' + (index+1),
-        lang: langMatch ? langMatch[1] : '',
-        uri: uriMatch ? new URL(uriMatch[1], videoLink).href : null
-      }
-    })
-
     const html = `
 <!DOCTYPE html>
 <html lang="en">
@@ -48,7 +35,6 @@ async function handleRequest(request) {
 html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-serif; overflow:hidden; }
 #player { width:100%; height:100%; position:relative; }
 video { width:100%; height:100%; object-fit:cover; background:#000; }
-#audioPlayer { display:none; }
 #overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; }
 #controls { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(0,0,0,0.5); opacity:0; transition:opacity 0.3s; }
 #player:hover #controls { opacity:1; }
@@ -65,8 +51,7 @@ select { background:#222; color:#fff; border:none; padding:5px; border-radius:5p
 </head>
 <body>
 <div id="player">
-  <video id="video" poster="${poster}" autoplay></video>
-  <audio id="audioPlayer" autoplay></audio>
+  <video id="video" poster="${poster}" autoplay controls></video>
   <div id="overlay">${title}</div>
   <button id="centerPlay">⏯</button>
   <button class="skipBtn" id="skipBack">⏪10s</button>
@@ -80,7 +65,6 @@ select { background:#222; color:#fff; border:none; padding:5px; border-radius:5p
 </div>
 <script>
 const video = document.getElementById("video")
-const audioPlayer = document.getElementById("audioPlayer")
 const centerPlay = document.getElementById("centerPlay")
 const skipBack = document.getElementById("skipBack")
 const skipForward = document.getElementById("skipForward")
@@ -89,55 +73,45 @@ const progressContainer = document.getElementById("progressContainer")
 const fullscreenBtn = document.getElementById("fullscreen")
 const audioSelect = document.getElementById("audioSelect")
 const hlsLink = "${videoLink}"
-const audioTracks = ${JSON.stringify(audioTracks)}
 
-// Initialize video HLS
-let hlsVideo = null
+let hls = null
 if(Hls.isSupported()){
-  hlsVideo = new Hls()
-  hlsVideo.loadSource(hlsLink)
-  hlsVideo.attachMedia(video)
+  hls = new Hls()
+  hls.loadSource(hlsLink)
+  hls.attachMedia(video)
+
+  hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    const audioTracks = hls.audioTracks
+    audioSelect.innerHTML = ''
+    audioTracks.forEach((track, index) => {
+      const option = document.createElement('option')
+      option.value = index
+      option.text = track.name + (track.lang ? ' (' + track.lang + ')' : '')
+      if(track.default) option.selected = true
+      audioSelect.appendChild(option)
+    })
+  })
+
+  audioSelect.addEventListener("change", () => {
+    hls.audioTrack = parseInt(audioSelect.value)
+  })
 } else if(video.canPlayType('application/vnd.apple.mpegurl')){
   video.src = hlsLink
 }
 
-// Populate audio dropdown
-audioSelect.innerHTML = ''
-audioTracks.forEach((track, index) => {
-  if(track.uri){
-    const option = document.createElement('option')
-    option.value = track.uri
-    option.text = track.name + (track.lang ? ' ('+track.lang+')' : '')
-    audioSelect.appendChild(option)
-  }
-})
-if(audioTracks[0] && audioTracks[0].uri) audioPlayer.src = audioTracks[0].uri
-
-// Sync audio with video continuously
-video.addEventListener('timeupdate', ()=>{ audioPlayer.currentTime = video.currentTime })
-
 // Center play toggle
 function togglePlay(){
-  if(video.paused){
-    video.play(); audioPlayer.play(); centerPlay.style.display='none'
-  } else {
-    video.pause(); audioPlayer.pause(); centerPlay.style.display='flex'
-  }
+  if(video.paused){ video.play(); centerPlay.style.display='none' } 
+  else { video.pause(); centerPlay.style.display='flex' } 
 }
 centerPlay.addEventListener("click", togglePlay)
 video.addEventListener("click", togglePlay)
-video.addEventListener("play", ()=>{ audioPlayer.play(); centerPlay.style.display='none' })
-video.addEventListener("pause", ()=>{ audioPlayer.pause(); centerPlay.style.display='flex' })
+video.addEventListener("play", ()=>{ centerPlay.style.display='none' })
+video.addEventListener("pause", ()=>{ centerPlay.style.display='flex' })
 
 // Skip buttons
-skipBack.addEventListener("click", ()=>{ 
-  video.currentTime = Math.max(0, video.currentTime-10)
-  audioPlayer.currentTime = video.currentTime
-})
-skipForward.addEventListener("click", ()=>{ 
-  video.currentTime = Math.min(video.duration, video.currentTime+10)
-  audioPlayer.currentTime = video.currentTime
-})
+skipBack.addEventListener("click", ()=>{ video.currentTime = Math.max(0, video.currentTime-10) })
+skipForward.addEventListener("click", ()=>{ video.currentTime = Math.min(video.duration, video.currentTime+10) })
 
 // Progress bar
 video.addEventListener("timeupdate", ()=>{ progress.style.width = (video.currentTime/video.duration*100)+'%' })
@@ -145,22 +119,10 @@ progressContainer.addEventListener("click", (e)=>{
   const rect = progressContainer.getBoundingClientRect()
   const pos = (e.clientX - rect.left)/rect.width
   video.currentTime = pos * video.duration
-  audioPlayer.currentTime = video.currentTime
 })
 
 // Fullscreen
 fullscreenBtn.addEventListener("click", ()=>{ video.requestFullscreen() })
-
-// Change audio track dynamically
-audioSelect.addEventListener("change", ()=>{
-  const val = audioSelect.value
-  if(val){
-    const currTime = video.currentTime
-    audioPlayer.src = val
-    audioPlayer.currentTime = currTime
-    if(!video.paused) audioPlayer.play()
-  }
-})
 </script>
 </body>
 </html>
