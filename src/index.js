@@ -2,11 +2,6 @@ addEventListener("fetch", event => {
   event.respondWith(handleRequest(event.request))
 })
 
-async function fetchText(url) {
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } })
-  return await res.text()
-}
-
 async function handleRequest(request) {
   const url = new URL(request.url)
   const tmdbId = url.searchParams.get("tmdb")
@@ -16,9 +11,7 @@ async function handleRequest(request) {
     const apiRes = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`)
     const json = await apiRes.json()
 
-    if (!json?.length || !json[0].file) {
-      return new Response("No streaming link found for this TMDB ID", { status: 404 })
-    }
+    if (!json?.length || !json[0].file) return new Response("No streaming link found", { status: 404 })
 
     const videoLink = json[0].file
     const title = json[0].title
@@ -28,11 +21,11 @@ async function handleRequest(request) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
 <style>
-html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-serif; overflow:hidden; }
+html, body { margin:0; height:100%; background:#000; font-family:sans-serif; overflow:hidden; }
 #player { width:100%; height:100%; position:relative; }
 video { width:100%; height:100%; object-fit:cover; background:#000; }
 #overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; }
@@ -51,7 +44,7 @@ select { background:#222; color:#fff; border:none; padding:5px; border-radius:5p
 </head>
 <body>
 <div id="player">
-  <video id="video" poster="${poster}" autoplay controls></video>
+  <video id="video" poster="${poster}" autoplay></video>
   <div id="overlay">${title}</div>
   <button id="centerPlay">⏯</button>
   <button class="skipBtn" id="skipBack">⏪10s</button>
@@ -81,9 +74,9 @@ if(Hls.isSupported()){
   hls.attachMedia(video)
 
   hls.on(Hls.Events.MANIFEST_PARSED, () => {
-    const audioTracks = hls.audioTracks
+    // Populate audio tracks
     audioSelect.innerHTML = ''
-    audioTracks.forEach((track, index) => {
+    hls.audioTracks.forEach((track, index) => {
       const option = document.createElement('option')
       option.value = index
       option.text = track.name + (track.lang ? ' (' + track.lang + ')' : '')
