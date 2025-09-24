@@ -13,7 +13,6 @@ async function handleRequest(request) {
   if (!tmdbId) return new Response("Missing ?tmdb= parameter", { status: 400 })
 
   try {
-    // Fetch JSON from uEmbed
     const apiRes = await fetch(`https://uembed.site/api/videos/tmdb?id=${tmdbId}`)
     const json = await apiRes.json()
 
@@ -30,7 +29,6 @@ async function handleRequest(request) {
     const audioTracks = []
     const subtitleTracks = []
 
-    // Parse EXT-X-MEDIA lines
     const lines = manifest.split("\n")
     lines.forEach(line => {
       if (line.startsWith("#EXT-X-MEDIA")) {
@@ -59,40 +57,58 @@ async function handleRequest(request) {
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>${title}</title>
       <style>
-        html, body { margin:0; height:100%; background:#000; font-family: 'Roboto', sans-serif; overflow:hidden; }
-        #player { width:100%; height:100%; position:relative; }
-        video { width:100%; height:100%; object-fit:cover; background:#000; }
+        html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-serif; overflow:hidden; }
+        #player { width:100%; height:100%; position:relative; background:black; display:flex; justify-content:center; align-items:center; }
+        video { width:100%; height:100%; object-fit:cover; background:black; }
         #overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:24px; font-weight:bold; text-shadow:2px 2px 5px #000; }
-        #controls { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center;
-                    padding:10px; background:rgba(0,0,0,0.5); opacity:0; transition:opacity 0.3s; }
+        #controls { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(0,0,0,0.5); opacity:0; transition:opacity 0.3s; }
         #player:hover #controls { opacity:1; }
         .btn { background:none; border:none; color:white; cursor:pointer; font-size:18px; margin:0 5px; }
         select { background:#222; color:#fff; border:none; padding:5px; border-radius:5px; }
+        #centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:64px; color:rgba(255,255,255,0.8); display:none; cursor:pointer; }
       </style>
       <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     </head>
     <body>
       <div id="player">
-        <video id="video" poster="${poster}" autoplay controls></video>
+        <video id="video" poster="${poster}" autoplay></video>
         <div id="overlay">${title}</div>
         <div id="controls">
+          <button class="btn" id="rewind">⏪10s</button>
           <button class="btn" id="playpause">⏯</button>
+          <button class="btn" id="forward">10s⏩</button>
           <label>Audio:</label>
           <select id="audioSelect"><option value="default">Default</option></select>
           <label>Subtitles:</label>
           <select id="subtitleSelect"><option value="off">Off</option></select>
           <button class="btn" id="fullscreen">⛶</button>
         </div>
+        <div id="centerPlay">⏯</div>
       </div>
       <script>
         const video = document.getElementById("video")
         const playpause = document.getElementById("playpause")
+        const rewind = document.getElementById("rewind")
+        const forward = document.getElementById("forward")
         const fullscreenBtn = document.getElementById("fullscreen")
+        const centerPlay = document.getElementById("centerPlay")
         const audioSelect = document.getElementById("audioSelect")
         const subtitleSelect = document.getElementById("subtitleSelect")
         const hlsLink = "${videoLink}"
         const audioTracks = ${JSON.stringify(audioTracks)}
         const subtitleTracks = ${JSON.stringify(subtitleTracks)}
+
+        function togglePlay() {
+          if(video.paused){ video.play(); centerPlay.style.display='none' }
+          else { video.pause(); centerPlay.style.display='block' }
+        }
+
+        playpause.addEventListener("click", togglePlay)
+        centerPlay.addEventListener("click", togglePlay)
+
+        rewind.addEventListener("click", ()=>{ video.currentTime = Math.max(0, video.currentTime - 10) })
+        forward.addEventListener("click", ()=>{ video.currentTime = Math.min(video.duration, video.currentTime + 10) })
+        fullscreenBtn.addEventListener("click", ()=>{ video.requestFullscreen() })
 
         if(Hls.isSupported()){
           const hls = new Hls()
@@ -100,23 +116,22 @@ async function handleRequest(request) {
           hls.attachMedia(video)
 
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            // Populate audio tracks
             if(audioTracks.length>0){
               audioSelect.innerHTML = ''
               audioTracks.forEach((track,index)=>{
                 const option = document.createElement('option')
-                option.value = index
-                option.text = track.name
+                option.value=index
+                option.text=track.name
                 audioSelect.appendChild(option)
               })
             }
-            // Populate subtitles
+
             if(subtitleTracks.length>0){
-              subtitleSelect.innerHTML = '<option value="off">Off</option>'
+              subtitleSelect.innerHTML='<option value="off">Off</option>'
               subtitleTracks.forEach((track,index)=>{
                 const option = document.createElement('option')
-                option.value = index
-                option.text = track.name
+                option.value=index
+                option.text=track.name
                 subtitleSelect.appendChild(option)
               })
             }
@@ -124,8 +139,7 @@ async function handleRequest(request) {
 
           audioSelect.addEventListener("change", ()=>{
             const val = audioSelect.value
-            if(val==='default') hls.audioTrack=0
-            else hls.audioTrack=parseInt(val)
+            hls.audioTrack = val==='default'? 0 : parseInt(val)
           })
 
           subtitleSelect.addEventListener("change", ()=>{
@@ -135,9 +149,6 @@ async function handleRequest(request) {
         } else if(video.canPlayType('application/vnd.apple.mpegurl')){
           video.src = hlsLink
         }
-
-        playpause.addEventListener("click", ()=>{ video.paused?video.play():video.pause() })
-        fullscreenBtn.addEventListener("click", ()=>{ video.requestFullscreen() })
       </script>
     </body>
     </html>
