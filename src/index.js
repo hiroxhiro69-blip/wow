@@ -126,6 +126,18 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 .controls-top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .controls-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
 .left, .right { display:flex; align-items:center; gap:8px; }
+
+/* Seek badges (Netflix-like) */
+.seek-badge { position:absolute; top:50%; transform:translateY(-50%); color:#fff; font-weight:700; font-size:52px; opacity:0; pointer-events:none; text-shadow:0 4px 10px rgba(0,0,0,0.6); display:flex; align-items:center; gap:10px; filter:drop-shadow(0 8px 24px rgba(0,0,0,0.6)); }
+.seek-badge.left { left:10%; }
+.seek-badge.right { right:10%; }
+.seek-badge svg { width:48px; height:48px; }
+@keyframes seek-pop { 0% { opacity:0; transform:translateY(-50%) scale(0.9) } 10% { opacity:1; transform:translateY(-50%) scale(1) } 80% { opacity:1 } 100% { opacity:0; transform:translateY(-50%) scale(1) } }
+.seek-badge.show { animation:seek-pop 700ms ease; }
+
+/* Rotate overlay for mobile portrait while in fullscreen */
+#rotateOverlay { position:absolute; inset:0; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.85); color:#fff; text-align:center; padding:24px; font-size:18px; }
+#rotateOverlay .box { background:#111; border:1px solid #222; border-radius:12px; padding:18px 22px; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
@@ -137,6 +149,15 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
   <div id="spinner"></div>
   <div id="zoneLeft"></div>
   <div id="zoneRight"></div>
+  <div id="seekBadgeLeft" class="seek-badge left">
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+    <span>-10s</span>
+  </div>
+  <div id="seekBadgeRight" class="seek-badge right">
+    <span>+10s</span>
+    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m8.59 16.59 1.41 1.41L16 12l-5.99-6L8.6 7.41 13.17 12z"/></svg>
+  </div>
+  <div id="rotateOverlay"><div class="box">Rotate your device for the best experience</div></div>
   <div id="controls">
     <div id="seekContainer"><div id="seekProgress"></div></div>
     <div class="controls-bottom">
@@ -181,6 +202,9 @@ const pipBtn = document.getElementById("pipBtn")
 const spinner = document.getElementById("spinner")
 const zoneLeft = document.getElementById("zoneLeft")
 const zoneRight = document.getElementById("zoneRight")
+const seekBadgeLeft = document.getElementById("seekBadgeLeft")
+const seekBadgeRight = document.getElementById("seekBadgeRight")
+const rotateOverlay = document.getElementById("rotateOverlay")
 const muteBtn = document.getElementById("muteBtn")
 const volume = document.getElementById("volume")
 const playPause = document.getElementById("playPause")
@@ -199,12 +223,21 @@ function isMobileCoarse(){
 async function lockLandscapeIfPossible(){
   if (!isMobileCoarse()) return
   try {
-    if (!document.fullscreenElement && player.requestFullscreen){ await player.requestFullscreen() }
+    if (!document.fullscreenElement && (video.requestFullscreen || player.requestFullscreen)){
+      if (video.requestFullscreen){ await video.requestFullscreen() } else { await player.requestFullscreen() }
+    }
     if (screen.orientation && screen.orientation.lock){ await screen.orientation.lock('landscape') }
   } catch(_e){}
 }
 function unlockOrientationIfPossible(){
   try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock() } catch(_e){}
+}
+
+function updateOrientationUI(){
+  if (!isMobileCoarse()) return
+  const isFs = !!document.fullscreenElement
+  const isPortrait = window.innerHeight > window.innerWidth
+  rotateOverlay.style.display = (isFs && isPortrait) ? 'flex' : 'none'
 }
 
 function renderAudioMenu(items, activeIndex){
@@ -366,13 +399,23 @@ muteBtn.addEventListener('click', ()=>{ video.muted = !video.muted; if(!video.mu
 // Fullscreen
 function toggleFullscreen(){
   if (!document.fullscreenElement){
-    (player.requestFullscreen && player.requestFullscreen())
+    (video.requestFullscreen && video.requestFullscreen()) || (player.requestFullscreen && player.requestFullscreen())
   } else {
     (document.exitFullscreen && document.exitFullscreen())
   }
 }
 fullscreenBtn.addEventListener("click", toggleFullscreen)
-document.addEventListener('fullscreenchange', ()=>{ showControls(); if (!document.fullscreenElement){ unlockOrientationIfPossible() } })
+document.addEventListener('fullscreenchange', ()=>{
+  showControls()
+  if (document.fullscreenElement){
+    lockLandscapeIfPossible()
+  } else {
+    unlockOrientationIfPossible()
+  }
+  updateOrientationUI()
+})
+window.addEventListener('orientationchange', updateOrientationUI)
+window.addEventListener('resize', updateOrientationUI)
 
 // Audio menu toggle
 audioBtn.addEventListener('click', (e)=>{
@@ -463,8 +506,31 @@ video.addEventListener('canplay', hideSpinner)
 
 // Gestures: double-tap seek, dblclick fullscreen
 function dblSeek(dir){ video.currentTime = Math.max(0, Math.min(video.duration||Infinity, video.currentTime + (dir*10))) }
-zoneLeft.addEventListener('dblclick', ()=>{ dblSeek(-1) })
-zoneRight.addEventListener('dblclick', ()=>{ dblSeek(1) })
+function showSeekBadge(dir){
+  const el = dir < 0 ? seekBadgeLeft : seekBadgeRight
+  if (!el) return
+  el.classList.remove('show')
+  void el.offsetWidth
+  el.classList.add('show')
+}
+zoneLeft.addEventListener('dblclick', ()=>{ dblSeek(-1); showSeekBadge(-1) })
+zoneRight.addEventListener('dblclick', ()=>{ dblSeek(1); showSeekBadge(1) })
+
+// Mobile double-tap detection
+let lastTapLeft = 0
+let lastTapRight = 0
+function handleZoneTap(side){
+  const now = Date.now()
+  if (side === 'left'){
+    if (now - lastTapLeft < 300){ dblSeek(-1); showSeekBadge(-1) }
+    lastTapLeft = now
+  } else {
+    if (now - lastTapRight < 300){ dblSeek(1); showSeekBadge(1) }
+    lastTapRight = now
+  }
+}
+zoneLeft.addEventListener('touchstart', ()=> handleZoneTap('left'))
+zoneRight.addEventListener('touchstart', ()=> handleZoneTap('right'))
 video.addEventListener('dblclick', toggleFullscreen)
 
 // Persistence: volume, speed, position (per TMDB)
