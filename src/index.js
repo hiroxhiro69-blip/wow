@@ -62,8 +62,8 @@ async function handleRequest(request) {
       : `https://kstream.vercel.app/api/content/movie/${tmdbId}`
 
     const nowowEndpoint = contentType === "series"
-      ? `https://nowow.xdtohin2.workers.dev/?tmdb=${tmdbId}/${seasonParam}/${episodeParam}`
-      : `https://nowow.xdtohin2.workers.dev/?tmdb=${tmdbId}`
+      ? `https://nowow.xdtohin2.workers.dev/tv/${tmdbId}/${seasonParam}/${episodeParam}`
+      : `https://nowow.xdtohin2.workers.dev/movie/${tmdbId}`
 
     const [kstreamRes, nowowRes] = await Promise.all([
       fetch(kstreamEndpoint, {
