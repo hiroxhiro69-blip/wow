@@ -774,6 +774,8 @@ function exitMobilePseudoFullscreen(){
 
 function ensureMobileLandscape(){
   if (!isMobileCoarse()) return
+  const nativeFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement
+  if (nativeFs) return
   if (!player.classList.contains('mobile-fullscreen')){
     enterMobilePseudoFullscreen()
   }
@@ -781,9 +783,30 @@ function ensureMobileLandscape(){
 
 async function toggleFullscreen(){
   if (isMobileCoarse()){
-    if (!player.classList.contains('mobile-fullscreen')){
-      enterMobilePseudoFullscreen()
+    const nativeFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement
+    const pseudoFs = player.classList.contains('mobile-fullscreen')
+    if (!nativeFs && !pseudoFs){
+      let nativeSucceeded = false
+      try {
+        await requestFullscreenElement(player)
+        nativeSucceeded = true
+      } catch(_err){
+        try {
+          await requestFullscreenElement(video)
+          nativeSucceeded = true
+        } catch(_err2){}
+      }
+      if (nativeSucceeded){
+        lockLandscapeIfPossible()
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      } else {
+        enterMobilePseudoFullscreen()
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+        showControls()
+      }
+      updateOrientationUI()
     } else {
+      await exitFullscreen().catch(()=>{})
       exitMobilePseudoFullscreen()
     }
     return
@@ -805,6 +828,7 @@ function onFullscreenChange(){
   showControls()
   if (isFullscreenActive()){
     lockLandscapeIfPossible()
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   } else {
     unlockOrientationIfPossible()
     exitMobilePseudoFullscreen()
