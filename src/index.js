@@ -33,10 +33,11 @@ async function handleRequest(request) {
           margin: 0; height: 100%; background: #000; font-family: 'Roboto', sans-serif; overflow: hidden;
         }
         #player {
-          width: 100%; height: 100%; background: black; display: flex; justify-content: center; align-items: center;
+          width: 100%; height: 100%; position: relative;
         }
         video {
           width: 100%; height: 100%; object-fit: cover;
+          background: black;
         }
         #controls {
           position: absolute; bottom: 0; left: 0; right: 0;
@@ -46,11 +47,16 @@ async function handleRequest(request) {
         #player:hover #controls { opacity: 1; }
         .btn { background: none; border: none; color: white; cursor: pointer; font-size: 18px; margin: 0 5px; }
         select { background: #222; color: #fff; border: none; padding: 5px; border-radius: 5px; }
+        #titleOverlay {
+          position: absolute; top: 10px; left: 10px; color: white; font-size: 20px;
+          background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 5px;
+        }
       </style>
       <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
     </head>
     <body>
       <div id="player">
+        <div id="titleOverlay">${title}</div>
         <video id="video" poster="${poster}" controls autoplay></video>
         <div id="controls">
           <button class="btn" id="playpause">⏯</button>
@@ -58,6 +64,7 @@ async function handleRequest(request) {
           <select id="audioSelect"><option value="default">Default</option></select>
           <label>Subtitles:</label>
           <select id="subtitleSelect"><option value="off">Off</option></select>
+          <button class="btn" id="fullscreen">⛶</button>
         </div>
       </div>
       <script>
@@ -65,15 +72,24 @@ async function handleRequest(request) {
         const playpause = document.getElementById("playpause")
         const audioSelect = document.getElementById("audioSelect")
         const subtitleSelect = document.getElementById("subtitleSelect")
+        const fullscreenBtn = document.getElementById("fullscreen")
         const hlsLink = "${videoLink}"
 
+        function setAudioTrack(hls, index) {
+          if(hls.audioTracks.length > 0) hls.audioTrack = index
+        }
+
+        function setSubtitleTrack(hls, index) {
+          if(hls.subtitleTracks.length > 0) hls.subtitleTrack = index
+        }
+
         if(Hls.isSupported()){
-          const hls = new Hls()
+          const hls = new Hls({ enableWorker: true })
           hls.loadSource(hlsLink)
           hls.attachMedia(video)
 
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            // Populate audio tracks
+            // Audio tracks
             if(hls.audioTracks.length > 0){
               audioSelect.innerHTML = ''
               hls.audioTracks.forEach((track, index)=>{
@@ -83,7 +99,7 @@ async function handleRequest(request) {
                 audioSelect.appendChild(option)
               })
             }
-            // Populate subtitles
+            // Subtitle tracks
             if(hls.subtitleTracks.length > 0){
               subtitleSelect.innerHTML = '<option value="off">Off</option>'
               hls.subtitleTracks.forEach((track, index)=>{
@@ -97,18 +113,29 @@ async function handleRequest(request) {
 
           audioSelect.addEventListener("change", ()=>{
             const val = audioSelect.value
-            hls.audioTrack = val === "default" ? 0 : parseInt(val)
+            setAudioTrack(hls, val === "default" ? 0 : parseInt(val))
           })
 
           subtitleSelect.addEventListener("change", ()=>{
             const val = subtitleSelect.value
-            hls.subtitleTrack = val === "off" ? -1 : parseInt(val)
+            setSubtitleTrack(hls, val === "off" ? -1 : parseInt(val))
           })
         } else if(video.canPlayType('application/vnd.apple.mpegurl')) {
           video.src = hlsLink
         }
 
         playpause.addEventListener("click", ()=>{ video.paused ? video.play() : video.pause() })
+
+        fullscreenBtn.addEventListener("click", ()=>{
+          if(!document.fullscreenElement) video.requestFullscreen()
+          else document.exitFullscreen()
+        })
+
+        // Double click fullscreen
+        video.addEventListener("dblclick", ()=>{
+          if(!document.fullscreenElement) video.requestFullscreen()
+          else document.exitFullscreen()
+        })
       </script>
     </body>
     </html>
