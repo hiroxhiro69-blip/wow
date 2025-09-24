@@ -712,16 +712,31 @@ function togglePlay(){
 }
 centerPlay.addEventListener("click", togglePlay)
 video.addEventListener("click", togglePlay)
-video.addEventListener("play", ()=>{ centerPlay.style.display='none' })
-video.addEventListener("pause", ()=>{ centerPlay.style.display='flex' })
+video.addEventListener("play", ()=>{
+  centerPlay.style.display='none'
+  if (mobilePlayToggle){
+    mobilePlayToggle.textContent = '⏸'
+    mobilePlayToggle.classList.add('active')
+  }
+})
+video.addEventListener("pause", ()=>{
+  centerPlay.style.display='flex'
+  if (mobilePlayToggle){
+    mobilePlayToggle.textContent = '▶'
+    mobilePlayToggle.classList.remove('active')
+  }
+})
 // Attempt to lock to landscape on mobile when playback starts
 video.addEventListener('play', ()=>{ lockLandscapeIfPossible(); ensureMobileLandscape() })
 
 if (mobilePlayToggle){
-  mobilePlayToggle.addEventListener('click', (e)=>{
+  const mobilePlayHandler = (e)=>{
+    e.preventDefault()
     e.stopPropagation()
     togglePlay()
-  })
+    showControls()
+  }
+  mobilePlayToggle.addEventListener('click', mobilePlayHandler, { passive: false })
 }
 
 // Time/seek bar
