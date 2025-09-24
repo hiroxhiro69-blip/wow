@@ -9,7 +9,35 @@ async function fetchText(url) {
 
 async function handleRequest(request) {
   const url = new URL(request.url)
-  // Origin restriction temporarily disabled for testing
+  // Allow only requests coming from the specified site
+  const allowedOrigin = 'https://hiroxstream.pages.dev'
+  const origin = request.headers.get('Origin') || ''
+  const referer = request.headers.get('Referer') || ''
+  const isAllowed = origin === allowedOrigin || referer.startsWith(allowedOrigin)
+
+  if (!isAllowed) {
+    const offlineHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Offline</title>
+  <style>
+    html, body { margin:0; height:100%; background:#000; color:#fff; display:flex; align-items:center; justify-content:center; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif }
+    .card { text-align:center; padding:24px; background:#111; border:1px solid #222; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.5) }
+    h1 { margin:0 0 8px; font-size:22px }
+    p { margin:0; color:#bbb }
+  </style>
+  </head>
+<body>
+  <div class="card">
+    <h1>Offline</h1>
+    <p>This content is only available on hiroxstream.pages.dev</p>
+  </div>
+</body>
+</html>`
+    return new Response(offlineHtml, { status: 403, headers: { 'Content-Type': 'text/html' } })
+  }
   const tmdbId = url.searchParams.get("tmdb")
   if (!tmdbId) return new Response("Missing ?tmdb= parameter", { status: 400 })
 
@@ -87,7 +115,7 @@ async function handleRequest(request) {
     const kstreamStreams = Array.isArray(kstreamData?.streams) ? kstreamData.streams : []
     const nowowStreams = Array.isArray(nowowData?.streams) ? nowowData.streams : []
 
-    const annotatedKstream = kstreamStreams.map((s) => ({ ...s, source: "kstream" }))
+    const annotatedKstream = kstreamStreams.map((s) => ({ ...s, source: "HiroXStream" }))
     const annotatedNowow = nowowStreams.map((s) => ({ ...s, source: "nowow" }))
 
     if (!annotatedKstream.length && !annotatedNowow.length) {
@@ -175,11 +203,11 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:64px; color:rgba(255,255,255,0.85); display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; }
 
 /* Netflix-like controls */
-#controls { position:absolute; left:0; right:0; bottom:0; padding:12px 16px calc(18px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0)); opacity:0; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease; }
+#controls { position:absolute; left:0; right:0; bottom:0; padding:16px 16px calc(20px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(0,0,0,0.7), rgba(0,0,0,0)); opacity:0; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease; }
 #player.show-controls #controls { opacity:1; transform:translateY(0); }
 #player.hide-cursor { cursor:none; }
 .row { display:flex; align-items:center; gap:10px; color:#fff; }
-.btn { background:none; border:none; color:white; cursor:pointer; font-size:18px; padding:6px 8px; border-radius:4px; }
+.btn { background:rgba(255,255,255,0.08); border:none; color:white; cursor:pointer; font-size:18px; padding:8px 10px; border-radius:6px; transition:background .2s ease; }
 .btn:hover { background:rgba(255,255,255,0.1); }
 .time { font-variant-numeric:tabular-nums; font-size:14px; color:#ddd; }
 
@@ -188,7 +216,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #seekProgress { position:absolute; top:0; left:0; height:100%; width:0%; background:#e50914; border-radius:3px; }
 
 /* Volume */
-#volumeContainer { display:flex; align-items:center; gap:6px; }
+#volumeContainer { display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; background:rgba(0,0,0,0.35); }
 #volume { -webkit-appearance:none; appearance:none; width:100px; height:4px; background:#666; border-radius:2px; outline:none; }
 #volume::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:12px; height:12px; background:#fff; border-radius:50%; cursor:pointer; }
 
@@ -231,8 +259,8 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 
 /* Left/right clusters */
 .controls-top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.controls-bottom { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.left, .right { display:flex; align-items:center; gap:8px; }
+.controls-bottom { display:flex; align-items:center; justify-content:space-between; gap:18px; }
+.left, .right { display:flex; align-items:center; gap:12px; }
 
 /* Seek badges (Netflix-like) */
 .seek-badge { position:absolute; top:50%; transform:translateY(-50%); color:#fff; font-weight:700; font-size:52px; opacity:0; pointer-events:none; text-shadow:0 4px 10px rgba(0,0,0,0.6); display:flex; align-items:center; gap:10px; filter:drop-shadow(0 8px 24px rgba(0,0,0,0.6)); }
@@ -269,12 +297,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
   <div id="controls">
     <div id="seekContainer"><div id="seekProgress"></div></div>
     <div class="controls-bottom">
-      <div class="left">
-        <button class="btn" id="playPause">▶</button>
-        <button class="btn" id="skipBack">⏪ 10</button>
-        <button class="btn" id="skipForward">10 ⏩</button>
-        <span class="time" id="timeLabel">00:00 / 00:00</span>
-      </div>
+      <span class="time" id="timeLabel">00:00 / 00:00</span>
       <div class="right">
         <div id="volumeContainer">
           <button class="btn" id="muteBtn">🔊</button>
@@ -284,7 +307,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
         <button class="btn" id="qualityBtn">Quality ▾</button>
         <button class="btn" id="speedBtn">Speed ▾</button>
         <button class="btn" id="pipBtn">PiP</button>
-    <button class="btn" id="fullscreen">⛶</button>
+        <button class="btn" id="fullscreen">⛶</button>
       </div>
     </div>
     <div id="audioMenu"></div>
@@ -295,8 +318,6 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 <script>
 const video = document.getElementById("video");
 const centerPlay = document.getElementById("centerPlay");
-const skipBack = document.getElementById("skipBack");
-const skipForward = document.getElementById("skipForward");
 const seekProgress = document.getElementById("seekProgress");
 const seekContainer = document.getElementById("seekContainer");
 const fullscreenBtn = document.getElementById("fullscreen");
@@ -315,7 +336,6 @@ const seekBadgeRight = document.getElementById("seekBadgeRight");
 const rotateOverlay = document.getElementById("rotateOverlay");
 const muteBtn = document.getElementById("muteBtn");
 const volume = document.getElementById("volume");
-const playPause = document.getElementById("playPause");
 const timeLabel = document.getElementById("timeLabel");
 const player = document.getElementById("player");
 const body = document.body;
@@ -570,9 +590,11 @@ initPlayer()
 // Center play toggle
 function togglePlay(){
   if(video.paused){
-    video.play(); centerPlay.style.display='none'; playPause.textContent='⏸'
+    video.play();
+    centerPlay.style.display='none';
   } else {
-    video.pause(); centerPlay.style.display='flex'; playPause.textContent='▶'
+    video.pause();
+    centerPlay.style.display='flex';
   }
 }
 centerPlay.addEventListener("click", togglePlay)
@@ -581,13 +603,6 @@ video.addEventListener("play", ()=>{ centerPlay.style.display='none' })
 video.addEventListener("pause", ()=>{ centerPlay.style.display='flex' })
 // Attempt to lock to landscape on mobile when playback starts
 video.addEventListener('play', ()=>{ lockLandscapeIfPossible() })
-
-// Play/pause button
-playPause.addEventListener('click', togglePlay)
-
-// Skip buttons
-skipBack.addEventListener("click", ()=>{ video.currentTime=Math.max(0,video.currentTime-10) })
-skipForward.addEventListener("click", ()=>{ video.currentTime=Math.min(video.duration,video.currentTime+10) })
 
 // Time/seek bar
 function fmtTime(t){ if(!isFinite(t)) return '00:00'; const h=Math.floor(t/3600); const m=Math.floor((t%3600)/60); const s=Math.floor(t%60); return (h>0?(h+':'):'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0') }
