@@ -119,13 +119,15 @@ if(Hls.isSupported()){
   // Populate audio tracks manually
   audioSelect.innerHTML = ''
   audioTracks.forEach(track=>{
-    if(track.uri) {
-      const option = document.createElement("option")
-      option.value = track.uri
-      option.text = `${track.name} (${track.language})`
-      audioSelect.appendChild(option)
-    }
-  })
+  if(track.uri) {
+    const option = document.createElement("option")
+    option.value = track.uri
+    option.text = track.name + " (" + track.language + ")"
+    audioSelect.appendChild(option)
+  }
+})
+
+  
 
   audioSelect.addEventListener("change", async ()=>{
     const selectedURI = audioSelect.value
