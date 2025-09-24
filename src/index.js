@@ -2,7 +2,7 @@ addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request))
 })
 
-const API_URL = 'https://uembed.xyz/api/movies' // replace with your actual endpoint
+const API_URL = 'https://uembed.site/api/videos/' // replace with your actual endpoint
 
 async function handleRequest(request) {
   const url = new URL(request.url)
