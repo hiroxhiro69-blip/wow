@@ -63,6 +63,9 @@ async function handleRequest(request) {
 <style>
 html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-serif; overflow:hidden; }
 #player { width:100%; height:100%; position:relative; cursor:default; }
+#player.mobile-fullscreen { position:fixed; inset:0; width:100vw; height:100vh; z-index:9999; background:#000; }
+#player.mobile-fullscreen video { object-fit:contain; }
+body.mobile-fs-lock { overflow:hidden; touch-action:none; }
 video { width:100%; height:100%; object-fit:cover; background:#000; }
 #overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; pointer-events:none; }
 #watermark { position:absolute; top:20px; right:20px; padding:6px 12px; font-size:14px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,0.85); background:rgba(0,0,0,0.45); border-radius:6px; pointer-events:none; backdrop-filter:blur(4px); }
@@ -212,6 +215,7 @@ const volume = document.getElementById("volume")
 const playPause = document.getElementById("playPause")
 const timeLabel = document.getElementById("timeLabel")
 const player = document.getElementById("player")
+const body = document.body
 
 // Ensure inline playback on mobile browsers and keep custom controls active
 video.setAttribute('playsinline', 'true')
@@ -232,9 +236,6 @@ function isMobileCoarse(){
 async function lockLandscapeIfPossible(){
   if (!isMobileCoarse()) return
   try {
-    if (!document.fullscreenElement && (video.requestFullscreen || player.requestFullscreen)){
-      if (video.requestFullscreen){ await video.requestFullscreen() } else { await player.requestFullscreen() }
-    }
     if (screen.orientation && screen.orientation.lock){ await screen.orientation.lock('landscape') }
   } catch(_e){}
 }
@@ -244,7 +245,7 @@ function unlockOrientationIfPossible(){
 
 function updateOrientationUI(){
   if (!isMobileCoarse()) return
-  const isFs = !!document.fullscreenElement
+  const isFs = isFullscreenActive()
   const isPortrait = window.innerHeight > window.innerWidth
   rotateOverlay.style.display = (isFs && isPortrait) ? 'flex' : 'none'
 }
@@ -421,7 +422,33 @@ function exitFullscreen(){
   return Promise.resolve()
 }
 
+function enterMobilePseudoFullscreen(){
+  player.classList.add('mobile-fullscreen')
+  body.classList.add('mobile-fs-lock')
+  video.controls = false
+  lockLandscapeIfPossible()
+  showControls()
+  updateOrientationUI()
+}
+
+function exitMobilePseudoFullscreen(){
+  player.classList.remove('mobile-fullscreen')
+  body.classList.remove('mobile-fs-lock')
+  unlockOrientationIfPossible()
+  showControls()
+  updateOrientationUI()
+}
+
 async function toggleFullscreen(){
+  if (isMobileCoarse()){
+    if (!player.classList.contains('mobile-fullscreen')){
+      enterMobilePseudoFullscreen()
+    } else {
+      exitMobilePseudoFullscreen()
+    }
+    return
+  }
+
   if (!isFullscreenActive()){
     try {
       await requestFullscreenElement(player)
@@ -440,6 +467,7 @@ function onFullscreenChange(){
     lockLandscapeIfPossible()
   } else {
     unlockOrientationIfPossible()
+    exitMobilePseudoFullscreen()
   }
   video.controls = false
   updateOrientationUI()
@@ -448,6 +476,10 @@ function onFullscreenChange(){
 document.addEventListener('fullscreenchange', onFullscreenChange)
 document.addEventListener('webkitfullscreenchange', onFullscreenChange)
 document.addEventListener('msfullscreenchange', onFullscreenChange)
+video.addEventListener('webkitendfullscreen', ()=>{
+  video.controls = false
+  exitMobilePseudoFullscreen()
+})
 window.addEventListener('orientationchange', updateOrientationUI)
 window.addEventListener('resize', updateOrientationUI)
 
@@ -504,7 +536,7 @@ pipBtn.addEventListener('click', async ()=>{
 
 // Auto-hide controls like Netflix
 function isFullscreenActive(){
-  return Boolean(document.fullscreenElement || document.webkitFullscreenElement)
+  return Boolean(document.fullscreenElement || document.webkitFullscreenElement || player.classList.contains('mobile-fullscreen'))
 }
 
 function showControls(){
