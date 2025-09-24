@@ -1000,7 +1000,7 @@ function showControls(){
   const autoHideDelay = 3000
   controlsHideTimer = setTimeout(() => {
     // keep controls visible if audio menu is open or when fullscreen toggles mid-timeout
-    if (audioMenu.classList.contains('show') || isFullscreenActive()){
+    if (audioMenu.classList.contains('show') || isFullscreenActive() || video.paused){
       player.classList.add('show-controls')
       player.classList.remove('hide-cursor')
       return
