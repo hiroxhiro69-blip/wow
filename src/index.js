@@ -126,7 +126,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
         <button class="btn" id="qualityBtn">Quality ▾</button>
         <button class="btn" id="speedBtn">Speed ▾</button>
         <button class="btn" id="pipBtn">PiP</button>
-        <button class="btn" id="fullscreen">⛶</button>
+    <button class="btn" id="fullscreen">⛶</button>
       </div>
     </div>
     <div id="audioMenu"></div>
@@ -162,6 +162,21 @@ let hls = null
 let audioSelect = null // virtual list source for Hls.js path
 let controlsHideTimer = null
 const storageKey = 'player:' + (${tmdbId?('"'+tmdbId+'"'):'"unknown"'})
+
+// Mobile landscape helper
+function isMobileCoarse(){
+  try { return window.matchMedia && window.matchMedia('(pointer: coarse)').matches } catch(_e){ return false }
+}
+async function lockLandscapeIfPossible(){
+  if (!isMobileCoarse()) return
+  try {
+    if (!document.fullscreenElement && player.requestFullscreen){ await player.requestFullscreen() }
+    if (screen.orientation && screen.orientation.lock){ await screen.orientation.lock('landscape') }
+  } catch(_e){}
+}
+function unlockOrientationIfPossible(){
+  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock() } catch(_e){}
+}
 
 function renderAudioMenu(items, activeIndex){
   audioMenu.innerHTML = ''
@@ -210,10 +225,10 @@ function initPlayer(){
       liveDurationInfinity: true
       // Keep video rendition stable when switching audio by not forcing auto right after
     })
-    hls.loadSource("${videoLink}")
-    hls.attachMedia(video)
+hls.loadSource("${videoLink}")
+hls.attachMedia(video)
 
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+hls.on(Hls.Events.MANIFEST_PARSED, () => {
       buildAudioListFromHls()
     })
 
@@ -278,6 +293,8 @@ centerPlay.addEventListener("click", togglePlay)
 video.addEventListener("click", togglePlay)
 video.addEventListener("play", ()=>{ centerPlay.style.display='none' })
 video.addEventListener("pause", ()=>{ centerPlay.style.display='flex' })
+// Attempt to lock to landscape on mobile when playback starts
+video.addEventListener('play', ()=>{ lockLandscapeIfPossible() })
 
 // Play/pause button
 playPause.addEventListener('click', togglePlay)
@@ -326,7 +343,7 @@ function toggleFullscreen(){
   }
 }
 fullscreenBtn.addEventListener("click", toggleFullscreen)
-document.addEventListener('fullscreenchange', ()=>{ showControls() })
+document.addEventListener('fullscreenchange', ()=>{ showControls(); if (!document.fullscreenElement){ unlockOrientationIfPossible() } })
 
 // Audio menu toggle
 audioBtn.addEventListener('click', (e)=>{
