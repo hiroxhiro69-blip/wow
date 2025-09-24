@@ -1,4 +1,4 @@
-name = "hls-proxy-worker"
+name = "nowow"
 main = "src/index.js"
 account_id = "138ad40583b45130939f842df289df5532803"
 workers_dev = true
