@@ -39,7 +39,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:64px; color:rgba(255,255,255,0.85); display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; }
 
 /* Netflix-like controls */
-#controls { position:absolute; left:0; right:0; bottom:0; padding:12px 16px 18px; background:linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0)); opacity:0; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease; }
+#controls { position:absolute; left:0; right:0; bottom:0; padding:12px 16px calc(18px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(0,0,0,0.65), rgba(0,0,0,0)); opacity:0; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease; }
 #player.show-controls #controls { opacity:1; transform:translateY(0); }
 #player.hide-cursor { cursor:none; }
 .row { display:flex; align-items:center; gap:10px; color:#fff; }
@@ -48,7 +48,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 .time { font-variant-numeric:tabular-nums; font-size:14px; color:#ddd; }
 
 /* Seek bar */
-#seekContainer { position:relative; height:6px; background:rgba(255,255,255,0.25); border-radius:3px; cursor:pointer; margin:8px 0 6px; }
+#seekContainer { position:relative; height:6px; background:rgba(255,255,255,0.25); border-radius:3px; cursor:pointer; margin:8px 0 6px; touch-action:none; }
 #seekProgress { position:absolute; top:0; left:0; height:100%; width:0%; background:#e50914; border-radius:3px; }
 
 /* Volume */
@@ -57,14 +57,14 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #volume::-webkit-slider-thumb { -webkit-appearance:none; appearance:none; width:12px; height:12px; background:#fff; border-radius:50%; cursor:pointer; }
 
 /* Audio menu */
-#audioMenu { position:absolute; right:16px; bottom:56px; background:rgba(20,20,20,0.95); color:#fff; border-radius:6px; padding:8px 0; min-width:180px; display:none; box-shadow:0 8px 24px rgba(0,0,0,0.5); }
+#audioMenu { position:absolute; right:16px; bottom:56px; background:rgba(20,20,20,0.95); color:#fff; border-radius:6px; padding:8px 0; min-width:180px; display:none; box-shadow:0 8px 24px rgba(0,0,0,0.5); max-height:50vh; overflow:auto; }
 #audioMenu.show { display:block; }
 .audio-item { padding:8px 14px; cursor:pointer; font-size:14px; }
 .audio-item:hover { background:rgba(255,255,255,0.1); }
 .audio-item.active { color:#e50914; font-weight:600; }
 
 /* Quality & Speed menus */
-#qualityMenu, #speedMenu { position:absolute; right:16px; bottom:56px; background:rgba(20,20,20,0.95); color:#fff; border-radius:6px; padding:8px 0; min-width:180px; display:none; box-shadow:0 8px 24px rgba(0,0,0,0.5); }
+#qualityMenu, #speedMenu { position:absolute; right:16px; bottom:56px; background:rgba(20,20,20,0.95); color:#fff; border-radius:6px; padding:8px 0; min-width:180px; display:none; box-shadow:0 8px 24px rgba(0,0,0,0.5); max-height:50vh; overflow:auto; }
 #qualityMenu.show, #speedMenu.show { display:block; }
 .menu-item { padding:8px 14px; cursor:pointer; font-size:14px; }
 .menu-item:hover { background:rgba(255,255,255,0.1); }
@@ -78,6 +78,20 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #zoneLeft, #zoneRight { position:absolute; top:0; bottom:0; width:35%; cursor:pointer; }
 #zoneLeft { left:0; }
 #zoneRight { right:0; }
+
+/* Mobile-first tweaks */
+@media (max-width: 768px) {
+  .btn { font-size:22px; padding:10px 12px; }
+  .time { font-size:13px; }
+  #seekContainer { height:10px; margin:10px 0 8px; }
+  #volume { width:80px; height:6px; }
+  .controls-bottom { gap:8px; }
+  .left, .right { gap:6px; }
+  /* Menus as bottom sheets */
+  #audioMenu, #qualityMenu, #speedMenu { position:fixed; left:0; right:0; bottom:0; border-radius:12px 12px 0 0; padding-bottom:calc(12px + env(safe-area-inset-bottom)); margin:0 0; max-height:45vh; }
+  .audio-item, .menu-item { padding:14px 18px; font-size:16px; }
+  #zoneLeft, #zoneRight { width:45%; }
+}
 
 /* Left/right clusters */
 .controls-top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
@@ -286,6 +300,18 @@ seekContainer.addEventListener('click', (e)=>{
   const clickPos = (e.clientX - rect.left)/rect.width
   video.currentTime = clickPos * video.duration
 })
+// Touch drag seek
+let seekingTouch = false
+let lastTouchX = 0
+seekContainer.addEventListener('touchstart', (e)=>{ if(!e.touches||!e.touches[0]) return; seekingTouch=true; lastTouchX=e.touches[0].clientX })
+seekContainer.addEventListener('touchmove', (e)=>{
+  if(!seekingTouch) return; if(!e.touches||!e.touches[0]) return
+  const rect = seekContainer.getBoundingClientRect()
+  const x = e.touches[0].clientX
+  const pos = Math.max(0, Math.min(1, (x - rect.left)/rect.width))
+  video.currentTime = pos * video.duration
+})
+seekContainer.addEventListener('touchend', ()=>{ seekingTouch=false })
 
 // Volume/mute
 volume.addEventListener('input', ()=>{ video.volume = parseFloat(volume.value); video.muted = (video.volume===0); muteBtn.textContent = (video.muted?'🔇':'🔊') })
@@ -366,7 +392,7 @@ function showControls(){
     } else {
       player.classList.add('hide-cursor')
     }
-  }, 2000)
+  }, (window.innerWidth<=768 ? 3000 : 2000))
 }
 ['mousemove','touchstart','keydown'].forEach(evt=>{ player.addEventListener(evt, showControls) })
 showControls()
