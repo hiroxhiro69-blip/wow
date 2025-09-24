@@ -31,8 +31,8 @@ async function handleRequest(request) {
       const langMatch = line.match(/LANGUAGE="([^"]+)"/)
       const uriMatch = line.match(/URI="([^"]+)"/)
       return {
-        name: nameMatch ? nameMatch[1] : null,
-        lang: langMatch ? langMatch[1] : "",
+        name: nameMatch ? nameMatch[1] : 'Audio ' + (index+1),
+        lang: langMatch ? langMatch[1] : '',
         uri: uriMatch ? new URL(uriMatch[1], videoLink).href : null
       }
     })
@@ -41,7 +41,7 @@ async function handleRequest(request) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
+<meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${title}</title>
 <style>
@@ -52,9 +52,14 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; }
 #controls { position:absolute; bottom:0; left:0; right:0; display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(0,0,0,0.5); opacity:0; transition:opacity 0.3s; }
 #player:hover #controls { opacity:1; }
-select { background:#222; color:#fff; border:none; padding:5px; border-radius:5px; }
 .btn { background:none; border:none; color:white; cursor:pointer; font-size:18px; margin:0 5px; }
+select { background:#222; color:#fff; border:none; padding:5px; border-radius:5px; }
 #centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:64px; color:rgba(255,255,255,0.8); display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; }
+.skipBtn { position:absolute; top:50%; transform:translateY(-50%); font-size:36px; color:rgba(255,255,255,0.5); background:none; border:none; cursor:pointer; z-index:2; padding:0 20px; }
+#skipBack { left:10px; }
+#skipForward { right:10px; }
+#progressContainer { position:absolute; bottom:50px; left:0; right:0; height:5px; background:rgba(255,255,255,0.2); cursor:pointer; }
+#progress { width:0%; height:100%; background:#e50914; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </head>
@@ -64,6 +69,9 @@ select { background:#222; color:#fff; border:none; padding:5px; border-radius:5p
   <audio id="audioPlayer" autoplay></audio>
   <div id="overlay">${title}</div>
   <button id="centerPlay">⏯</button>
+  <button class="skipBtn" id="skipBack">⏪10s</button>
+  <button class="skipBtn" id="skipForward">10s⏩</button>
+  <div id="progressContainer"><div id="progress"></div></div>
   <div id="controls">
     <label>Audio:</label>
     <select id="audioSelect"><option>Loading...</option></select>
@@ -74,12 +82,16 @@ select { background:#222; color:#fff; border:none; padding:5px; border-radius:5p
 const video = document.getElementById("video")
 const audioPlayer = document.getElementById("audioPlayer")
 const centerPlay = document.getElementById("centerPlay")
-const audioSelect = document.getElementById("audioSelect")
+const skipBack = document.getElementById("skipBack")
+const skipForward = document.getElementById("skipForward")
+const progress = document.getElementById("progress")
+const progressContainer = document.getElementById("progressContainer")
 const fullscreenBtn = document.getElementById("fullscreen")
+const audioSelect = document.getElementById("audioSelect")
 const hlsLink = "${videoLink}"
 const audioTracks = ${JSON.stringify(audioTracks)}
 
-// Initialize HLS for video
+// Initialize video HLS
 let hlsVideo = null
 if(Hls.isSupported()){
   hlsVideo = new Hls()
@@ -95,27 +107,21 @@ audioTracks.forEach((track, index) => {
   if(track.uri){
     const option = document.createElement('option')
     option.value = track.uri
-    // Correct concatenation to avoid Wrangler error
-    let nameText = track.name ? track.name : 'Audio ' + (index+1)
-    option.text = nameText + (track.lang ? ' (' + track.lang + ')' : '')
+    option.text = track.name + (track.lang ? ' ('+track.lang+')' : '')
     audioSelect.appendChild(option)
   }
 })
 if(audioTracks[0] && audioTracks[0].uri) audioPlayer.src = audioTracks[0].uri
 
-// Sync audio with video
+// Sync audio with video continuously
 video.addEventListener('timeupdate', ()=>{ audioPlayer.currentTime = video.currentTime })
 
 // Center play toggle
 function togglePlay(){
   if(video.paused){
-    video.play()
-    audioPlayer.play()
-    centerPlay.style.display='none'
+    video.play(); audioPlayer.play(); centerPlay.style.display='none'
   } else {
-    video.pause()
-    audioPlayer.pause()
-    centerPlay.style.display='flex'
+    video.pause(); audioPlayer.pause(); centerPlay.style.display='flex'
   }
 }
 centerPlay.addEventListener("click", togglePlay)
@@ -123,15 +129,34 @@ video.addEventListener("click", togglePlay)
 video.addEventListener("play", ()=>{ audioPlayer.play(); centerPlay.style.display='none' })
 video.addEventListener("pause", ()=>{ audioPlayer.pause(); centerPlay.style.display='flex' })
 
+// Skip buttons
+skipBack.addEventListener("click", ()=>{ 
+  video.currentTime = Math.max(0, video.currentTime-10)
+  audioPlayer.currentTime = video.currentTime
+})
+skipForward.addEventListener("click", ()=>{ 
+  video.currentTime = Math.min(video.duration, video.currentTime+10)
+  audioPlayer.currentTime = video.currentTime
+})
+
+// Progress bar
+video.addEventListener("timeupdate", ()=>{ progress.style.width = (video.currentTime/video.duration*100)+'%' })
+progressContainer.addEventListener("click", (e)=>{
+  const rect = progressContainer.getBoundingClientRect()
+  const pos = (e.clientX - rect.left)/rect.width
+  video.currentTime = pos * video.duration
+  audioPlayer.currentTime = video.currentTime
+})
+
 // Fullscreen
 fullscreenBtn.addEventListener("click", ()=>{ video.requestFullscreen() })
 
-// Change audio track without affecting video
+// Change audio track dynamically
 audioSelect.addEventListener("change", ()=>{
-  const selectedURI = audioSelect.value
-  if(selectedURI){
+  const val = audioSelect.value
+  if(val){
     const currTime = video.currentTime
-    audioPlayer.src = selectedURI
+    audioPlayer.src = val
     audioPlayer.currentTime = currTime
     if(!video.paused) audioPlayer.play()
   }
