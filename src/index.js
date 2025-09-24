@@ -439,7 +439,7 @@ function buildCustomStreamMenu(){
   }
   const items = streamVariants.map((variant) => ({
     label: variant.language || 'Variant',
-    meta: variant.source ? `Source: ${variant.source}` : ''
+    meta: variant.source ? ('Source: ' + variant.source) : ''
   }));
   let highlightIndex = activeStreamIndex;
   if (highlightIndex < 0) highlightIndex = 0;
