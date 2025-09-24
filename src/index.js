@@ -1019,9 +1019,6 @@ function showControls(){
     clearTimeout(controlsHideTimer)
     controlsHideTimer = null
   }
-  if (isFullscreenActive()){
-    return
-  }
   const autoHideDelay = 3000
   controlsHideTimer = setTimeout(() => {
     // keep controls visible if audio menu is open or when fullscreen toggles mid-timeout
