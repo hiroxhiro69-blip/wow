@@ -1,0 +1,14 @@
+{
+  "name": "hls-proxy-worker",
+  "version": "1.0.0",
+  "description": "A Cloudflare Worker to proxy HLS streams",
+  "main": "src/index.js",
+  "scripts": {
+    "deploy": "wrangler deploy"
+  },
+  "author": "YourName",
+  "license": "MIT",
+  "devDependencies": {
+    "wrangler": "^4.39.0"
+  }
+}
