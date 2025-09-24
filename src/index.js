@@ -9,35 +9,7 @@ async function fetchText(url) {
 
 async function handleRequest(request) {
   const url = new URL(request.url)
-  // Allow only requests coming from the specified site
-  const allowedOrigin = 'https://hiroxstream.pages.dev'
-  const origin = request.headers.get('Origin') || ''
-  const referer = request.headers.get('Referer') || ''
-  const isAllowed = origin === allowedOrigin || referer.startsWith(allowedOrigin)
-
-  if (!isAllowed) {
-    const offlineHtml = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Offline</title>
-  <style>
-    html, body { margin:0; height:100%; background:#000; color:#fff; display:flex; align-items:center; justify-content:center; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif }
-    .card { text-align:center; padding:24px; background:#111; border:1px solid #222; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.5) }
-    h1 { margin:0 0 8px; font-size:22px }
-    p { margin:0; color:#bbb }
-  </style>
-  </head>
-<body>
-  <div class="card">
-    <h1>Offline</h1>
-    <p>This content is only available on hiroxstream.pages.dev</p>
-  </div>
-</body>
-</html>`
-    return new Response(offlineHtml, { status: 403, headers: { 'Content-Type': 'text/html' } })
-  }
+  // Origin restriction temporarily disabled for testing
   const tmdbId = url.searchParams.get("tmdb")
   if (!tmdbId) return new Response("Missing ?tmdb= parameter", { status: 400 })
 
