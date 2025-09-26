@@ -153,21 +153,112 @@ self.addEventListener('fetch', (event) => {
     if (kstreamRes) {
       if (kstreamRes.ok) {
         kstreamData = await parseJsonSafe(kstreamRes)
-      } else if (kstreamRes.status === 404) {
-        kstreamData = { streams: [] }
       } else {
-        return new Response(`Upstream error from kstream (${kstreamRes.status})`, { status: 502 })
+        kstreamData = { streams: [] }
       }
     }
 
     if (nowowRes) {
       if (nowowRes.ok) {
         nowowData = await parseJsonSafe(nowowRes)
-      } else if (nowowRes.status === 404) {
-        nowowData = { streams: [] }
       } else {
-        return new Response(`Upstream error from nowow (${nowowRes.status})`, { status: 502 })
+        nowowData = { streams: [] }
       }
+    }
+
+    const escapeHtml = (value) => {
+      if (typeof value !== "string") return ""
+      const replacements = {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      }
+      return value.replace(/[&<>"']/g, (char) => replacements[char] || char)
+    }
+
+    const buildVidlinkFallbackResponse = (reason) => {
+      const fallbackTitle = kstreamData?.title || nowowData?.title || `TMDB #${tmdbId}`
+      const safeTitle = escapeHtml(fallbackTitle)
+      const safeReason = reason ? escapeHtml(reason) : ""
+      const safeTmdbId = encodeURIComponent(tmdbId)
+      const seasonSegment = encodeURIComponent(seasonParam || "")
+      const episodeSegment = encodeURIComponent(episodeParam || "")
+      const fallbackUrl = contentType === "series"
+        ? `https://vidlink.pro/tv/${safeTmdbId}/${seasonSegment}/${episodeSegment}`
+        : `https://vidlink.pro/movie/${safeTmdbId}`
+      const messageBar = safeReason
+        ? `<div class="message-bar">${safeReason}</div>`
+        : ""
+
+      const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${safeTitle}</title>
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #000;
+    color: #fff;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif;
+  }
+  #wrapper {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+  iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+  }
+  .message-bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 10px 16px;
+    background: rgba(0, 0, 0, 0.7);
+    font-size: 14px;
+    line-height: 1.4;
+    z-index: 2;
+    text-align: center;
+  }
+  .open-link {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    background: rgba(229, 9, 20, 0.9);
+    color: #fff;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-size: 14px;
+    cursor: pointer;
+    z-index: 2;
+    text-decoration: none;
+    box-shadow: 0 6px 16px rgba(229, 9, 20, 0.35);
+  }
+  .open-link:hover {
+    background: rgba(229, 9, 20, 1);
+  }
+</style>
+</head>
+<body>
+  <div id="wrapper">
+    ${messageBar}
+    <iframe src="${fallbackUrl}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <a class="open-link" href="${fallbackUrl}" target="_blank" rel="noopener noreferrer">Open in new tab</a>
+  </div>
+</body>
+</html>`
+
+      return new Response(html, { headers: { "Content-Type": "text/html" } })
     }
 
     const kstreamStreams = Array.isArray(kstreamData?.streams) ? kstreamData.streams : []
@@ -177,7 +268,7 @@ self.addEventListener('fetch', (event) => {
     const annotatedNowow = nowowStreams.map((s) => ({ ...s, source: "nowow" }))
 
     if (!annotatedKstream.length && !annotatedNowow.length) {
-      return new Response("No streaming link found for this TMDB ID", { status: 404 })
+      return buildVidlinkFallbackResponse("Primary sources were unavailable. Loaded VidLink fallback player.")
     }
 
     const pickPreferredStream = (streams) => {
@@ -225,7 +316,7 @@ self.addEventListener('fetch', (event) => {
     poster = kstreamData?.poster || kstreamData?.thumbnail || nowowData?.poster || nowowData?.thumbnail || ""
 
     if (!videoLink) {
-      return new Response("No playable stream was resolved", { status: 500 })
+      return buildVidlinkFallbackResponse("Could not resolve a direct stream. Loaded VidLink fallback player.")
     }
 
     if (!poster) {
