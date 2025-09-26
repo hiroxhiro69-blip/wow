@@ -284,19 +284,31 @@ self.addEventListener('fetch', (event) => {
     }
 
     let nextEpisodeHref = ""
-    if (
-      contentType === "series" &&
-      typeof episodeParam === "string" &&
-      episodeParam !== ""
-    ) {
-      const parsedEpisode = parseInt(episodeParam, 10)
-      if (!Number.isNaN(parsedEpisode)) {
+    if (contentType === "series") {
+      const computeNextEpisodeValue = (raw) => {
+        if (typeof raw !== "string") return null
+        const trimmed = raw.trim()
+        if (!trimmed) return null
+        if (/^\d+$/.test(trimmed)) {
+          const width = trimmed.length
+          const incremented = (parseInt(trimmed, 10) + 1).toString()
+          return incremented.padStart(width, "0")
+        }
+        const numeric = Number(trimmed)
+        if (Number.isFinite(numeric)) {
+          return String(numeric + 1)
+        }
+        return null
+      }
+
+      const nextEpisodeValue = computeNextEpisodeValue(episodeParam)
+      if (nextEpisodeValue !== null) {
         const nextEpisodeParams = new URLSearchParams()
         nextEpisodeParams.set("tmdb", tmdbId)
-        if (typeof seasonParam === "string" && seasonParam !== "") {
-          nextEpisodeParams.set("season", seasonParam)
+        if (typeof seasonParam === "string" && seasonParam.trim() !== "") {
+          nextEpisodeParams.set("season", seasonParam.trim())
         }
-        nextEpisodeParams.set("episode", String(parsedEpisode + 1))
+        nextEpisodeParams.set("episode", nextEpisodeValue)
         nextEpisodeHref = `?${nextEpisodeParams.toString()}`
       }
     }
@@ -524,8 +536,27 @@ const streamVariants = ${JSON.stringify(streamVariants)};
 const streamLanguage = ${JSON.stringify(streamLanguage)};
 const storageKey = ${JSON.stringify(storageKey)};
 const initialStreamUrl = ${JSON.stringify(videoLink)};
-const nextEpisodeUrl = ${JSON.stringify(nextEpisodeHref)};
+const nextEpisodeLink = ${JSON.stringify(nextEpisodeHref)};
+const initialSeasonParam = ${JSON.stringify(seasonParam || "")};
+const initialEpisodeParam = ${JSON.stringify(episodeParam || "")};
+const tmdbParam = ${JSON.stringify(tmdbId || "")};
 const nextEpisodeBtn = document.getElementById("nextEpisodeBtn");
+
+function computeNextEpisodeValue(raw){
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  if (/^\d+$/.test(trimmed)){
+    const width = trimmed.length;
+    const incremented = (parseInt(trimmed, 10) + 1).toString();
+    return incremented.padStart(width, '0');
+  }
+  const numeric = Number(trimmed);
+  if (Number.isFinite(numeric)){
+    return String(numeric + 1);
+  }
+  return null;
+}
 
 let currentStreamHeaders = initialStreamHeaders || {};
 let currentStreamUrl = initialStreamUrl;
