@@ -86,6 +86,281 @@ self.addEventListener('fetch', (event) => {
     let streamHeaders = {}
     let streamLanguage = "Default"
     let streamVariants = []
+    let seasonsData = null
+    let episodesData = null
+
+    // Fetch TMDB data for series information
+    const tmdbEndpoint = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=YOUR_TMDB_API_KEY`
+    const tmdbRes = await fetch(tmdbEndpoint, {
+      headers: {
+        "Accept": "application/json"
+      },
+      signal: AbortSignal.timeout(8000)
+    }).catch((err) => {
+      console.debug('TMDB API error:', err.message);
+      return null;
+    })
+
+    if (tmdbRes && tmdbRes.ok) {
+      const tmdbData = await tmdbRes.json()
+      title = tmdbData.name || `TMDB #${tmdbId}`
+      poster = tmdbData.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbData.poster_path}` : ""
+
+      // Fetch seasons data
+      const seasonsEndpoint = `https://api.themoviedb.org/3/tv/${tmdbId}/seasons?api_key=YOUR_TMDB_API_KEY`
+      const seasonsRes = await fetch(seasonsEndpoint, {
+        headers: {
+          "Accept": "application/json"
+        },
+        signal: AbortSignal.timeout(8000)
+      }).catch((err) => {
+        console.debug('TMDB Seasons API error:', err.message);
+        return null;
+      })
+
+      if (seasonsRes && seasonsRes.ok) {
+        seasonsData = await seasonsRes.json()
+      }
+    }
+
+    // If no specific season/episode, show season/episode selector
+    if (contentType === "movie" || !seasonsData) {
+      // Show season/episode selector page
+      const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${title} - Select Episode</title>
+<style>
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+  body {
+    background: #000;
+    color: #fff;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    min-height: 100vh;
+    padding: 20px;
+  }
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+  }
+  .header {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 30px;
+  }
+  .poster {
+    width: 120px;
+    height: 180px;
+    background: #333;
+    border-radius: 8px;
+    object-fit: cover;
+  }
+  .title-info h1 {
+    font-size: 2rem;
+    margin-bottom: 10px;
+  }
+  .seasons-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 15px;
+    margin-bottom: 30px;
+  }
+  .season-card {
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .season-card:hover {
+    background: #222;
+    border-color: #e50914;
+  }
+  .season-card h3 {
+    font-size: 1.1rem;
+    margin-bottom: 5px;
+  }
+  .season-card p {
+    color: #ccc;
+    font-size: 0.9rem;
+  }
+  .episodes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 15px;
+  }
+  .episode-card {
+    background: #111;
+    border: 1px solid #333;
+    border-radius: 8px;
+    padding: 15px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+  }
+  .episode-card:hover {
+    background: #222;
+    border-color: #e50914;
+  }
+  .episode-header {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .episode-number {
+    background: #e50914;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-weight: bold;
+    font-size: 0.9rem;
+  }
+  .episode-title {
+    flex: 1;
+    font-weight: 600;
+  }
+  .episode-overview {
+    color: #ccc;
+    font-size: 0.9rem;
+    line-height: 1.4;
+  }
+  .loading {
+    text-align: center;
+    padding: 50px;
+    font-size: 1.2rem;
+  }
+  .back-btn {
+    background: #e50914;
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 5px;
+    cursor: pointer;
+    margin-bottom: 20px;
+    font-size: 1rem;
+  }
+  .back-btn:hover {
+    background: #f40612;
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <img src="${poster}" alt="${title}" class="poster" onerror="this.style.display='none'">
+      <div class="title-info">
+        <h1>${title}</h1>
+        <p>Select a season and episode to watch</p>
+      </div>
+    </div>
+
+    <div id="seasons-container">
+      <h2>Seasons</h2>
+      <div class="seasons-grid" id="seasons-grid">
+        <div class="loading">Loading seasons...</div>
+      </div>
+    </div>
+
+    <div id="episodes-container" style="display: none;">
+      <button class="back-btn" onclick="showSeasons()">← Back to Seasons</button>
+      <h2 id="current-season-title">Season 1</h2>
+      <div class="episodes-grid" id="episodes-grid">
+        <div class="loading">Loading episodes...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tmdbId = '${tmdbId}';
+    let currentSeason = null;
+    let seasonsData = ${JSON.stringify(seasonsData)};
+
+    function showSeasons() {
+      document.getElementById('seasons-container').style.display = 'block';
+      document.getElementById('episodes-container').style.display = 'none';
+    }
+
+    function showEpisodes(seasonNumber, seasonName) {
+      currentSeason = seasonNumber;
+      document.getElementById('seasons-container').style.display = 'none';
+      document.getElementById('episodes-container').style.display = 'block';
+      document.getElementById('current-season-title').textContent = seasonName;
+
+      // Fetch episodes for this season
+      fetchEpisodes(seasonNumber);
+    }
+
+    async function fetchEpisodes(seasonNumber) {
+      const episodesGrid = document.getElementById('episodes-grid');
+      episodesGrid.innerHTML = '<div class="loading">Loading episodes...</div>';
+
+      try {
+        const response = await fetch(\`https://api.themoviedb.org/3/tv/\${tmdbId}/season/\${seasonNumber}?api_key=YOUR_TMDB_API_KEY\`);
+        const data = await response.json();
+
+        episodesGrid.innerHTML = '';
+
+        data.episodes.forEach(episode => {
+          const episodeCard = document.createElement('div');
+          episodeCard.className = 'episode-card';
+          episodeCard.onclick = () => playEpisode(seasonNumber, episode.episode_number);
+
+          episodeCard.innerHTML = \`
+            <div class="episode-header">
+              <div class="episode-number">E\${episode.episode_number}</div>
+              <div class="episode-title">\${episode.name}</div>
+            </div>
+            <div class="episode-overview">\${episode.overview || 'No description available'}</div>
+          \`;
+
+          episodesGrid.appendChild(episodeCard);
+        });
+      } catch (error) {
+        episodesGrid.innerHTML = '<div class="loading">Error loading episodes</div>';
+      }
+    }
+
+    function playEpisode(season, episode) {
+      const url = new URL(window.location);
+      url.searchParams.set('season', season);
+      url.searchParams.set('episode', episode);
+      window.location.href = url.toString();
+    }
+
+    // Load seasons if data is available
+    if (seasonsData && seasonsData.seasons) {
+      const seasonsGrid = document.getElementById('seasons-grid');
+      seasonsGrid.innerHTML = '';
+
+      seasonsData.seasons.forEach(season => {
+        if (season.season_number === 0) return; // Skip specials
+
+        const seasonCard = document.createElement('div');
+        seasonCard.className = 'season-card';
+        seasonCard.onclick = () => showEpisodes(season.season_number, season.name);
+
+        seasonCard.innerHTML = \`
+          <h3>\${season.name}</h3>
+          <p>\${season.episode_count} episodes</p>
+        \`;
+
+        seasonsGrid.appendChild(seasonCard);
+      });
+    }
+  </script>
+</body>
+</html>`
+
+      return new Response(html, { headers: { "Content-Type": "text/html" } })
+    }
 
     const kstreamEndpoint = contentType === "series"
       ? `https://kstream.vercel.app/api/content/tv/${tmdbId}/${seasonParam}/${episodeParam}`
@@ -462,11 +737,8 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
         <button class="round-btn" id="mobilePlayToggle" aria-label="Play/Pause">▶</button>
         <span class="time" id="timeLabel">00:00 / 00:00</span>
         <div class="mobile-actions">
-          <button class="round-btn" id="mobileMute" aria-label="Mute">🔊</button>
-          <button class="round-btn" id="mobileAudio" aria-label="Audio tracks">🎵</button>
-          <button class="round-btn" id="mobileQuality" aria-label="Quality">HD</button>
-          <button class="round-btn" id="mobileSpeed" aria-label="Playback speed">⏱</button>
-          <button class="round-btn" id="mobileFullscreen" aria-label="Fullscreen">⛶</button>
+          <button class="round-btn" id="mobilePrevEpisode" aria-label="Previous Episode">⏮</button>
+          <button class="round-btn" id="mobileNextEpisode" aria-label="Next Episode">⏭</button>
         </div>
       </div>
       <div class="desktop-actions">
@@ -474,11 +746,8 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
           <button class="btn" id="muteBtn" aria-label="Mute" title="Mute">🔊</button>
           <input type="range" id="volume" min="0" max="1" step="0.05" value="1" />
         </div>
-        <button class="btn" id="audioBtn" aria-label="Audio tracks" title="Audio tracks">Audio ▾</button>
-        <button class="btn" id="qualityBtn" aria-label="Quality" title="Quality">Quality ▾</button>
-        <button class="btn" id="speedBtn" aria-label="Playback speed" title="Playback speed">Speed ▾</button>
-        <button class="btn" id="pipBtn" aria-label="Picture in picture" title="Picture in picture">PiP</button>
-        <button class="btn" id="fullscreen" aria-label="Fullscreen" title="Fullscreen">⛶</button>
+        <button class="btn" id="prevEpisodeBtn" aria-label="Previous Episode" title="Previous Episode">⏮</button>
+        <button class="btn" id="nextEpisodeBtn" aria-label="Next Episode" title="Next Episode">⏭</button>
       </div>
     </div>
     <div id="audioMenu"></div>
@@ -509,12 +778,10 @@ const rotateOverlay = document.getElementById("rotateOverlay");
 const muteBtn = document.getElementById("muteBtn");
 const volume = document.getElementById("volume");
 const timeLabel = document.getElementById("timeLabel");
-const mobilePlayToggle = document.getElementById("mobilePlayToggle");
-const mobileMute = document.getElementById("mobileMute");
-const mobileAudio = document.getElementById("mobileAudio");
-const mobileQuality = document.getElementById("mobileQuality");
-const mobileSpeed = document.getElementById("mobileSpeed");
-const mobileFullscreen = document.getElementById("mobileFullscreen");
+const mobilePrevEpisode = document.getElementById("mobilePrevEpisode");
+const mobileNextEpisode = document.getElementById("mobileNextEpisode");
+const prevEpisodeBtn = document.getElementById("prevEpisodeBtn");
+const nextEpisodeBtn = document.getElementById("nextEpisodeBtn");
 const player = document.getElementById("player");
 const body = document.body;
 const initialStreamHeaders = ${JSON.stringify(streamHeaders)};
@@ -522,19 +789,115 @@ const streamVariants = ${JSON.stringify(streamVariants)};
 const streamLanguage = ${JSON.stringify(streamLanguage)};
 const storageKey = ${JSON.stringify(storageKey)};
 const initialStreamUrl = ${JSON.stringify(videoLink)};
+const tmdbId = ${JSON.stringify(tmdbId)};
+const currentSeason = ${JSON.stringify(seasonParam)};
+const currentEpisode = ${JSON.stringify(episodeParam)};
 
-let wakeLockSentinel = null;
-async function requestWakeLock(){
+let episodeData = null;
+let maxEpisodes = 0;
+
+// Load episode data for navigation
+async function loadEpisodeData() {
+  if (!tmdbId || !currentSeason) return;
+
   try {
-    if ('wakeLock' in navigator && navigator.wakeLock?.request){
-      wakeLockSentinel = await navigator.wakeLock.request('screen');
-      wakeLockSentinel?.addEventListener('release', () => {
-        wakeLockSentinel = null;
-      });
-    }
-  } catch(_err) {
-    wakeLockSentinel = null;
+    const response = await fetch(\`https://api.themoviedb.org/3/tv/\${tmdbId}/season/\${currentSeason}?api_key=YOUR_TMDB_API_KEY\`);
+    const data = await response.json();
+    episodeData = data.episodes;
+    maxEpisodes = data.episodes ? data.episodes.length : 0;
+    updateEpisodeNavigation();
+  } catch (error) {
+    console.debug('Failed to load episode data:', error);
   }
+}
+
+function updateEpisodeNavigation() {
+  if (!currentEpisode || !episodeData) return;
+
+  const currentEpisodeNum = parseInt(currentEpisode);
+  const prevBtn = document.getElementById('prevEpisodeBtn');
+  const nextBtn = document.getElementById('nextEpisodeBtn');
+
+  if (prevBtn) {
+    prevBtn.style.opacity = currentEpisodeNum > 1 ? '1' : '0.5';
+    prevBtn.style.pointerEvents = currentEpisodeNum > 1 ? 'auto' : 'none';
+  }
+
+  if (nextBtn) {
+    nextBtn.style.opacity = currentEpisodeNum < maxEpisodes ? '1' : '0.5';
+    nextBtn.style.pointerEvents = currentEpisodeNum < maxEpisodes ? 'auto' : 'none';
+  }
+}
+
+function navigateToEpisode(direction) {
+  if (!currentSeason || !currentEpisode) return;
+
+  const currentEpisodeNum = parseInt(currentEpisode);
+  let newEpisodeNum = direction === 'next' ? currentEpisodeNum + 1 : currentEpisodeNum - 1;
+
+  // Ensure we don't go out of bounds
+  if (newEpisodeNum < 1 || newEpisodeNum > maxEpisodes) return;
+
+  const url = new URL(window.location);
+  url.searchParams.set('season', currentSeason);
+  url.searchParams.set('episode', newEpisodeNum);
+  window.location.href = url.toString();
+}
+
+function showEpisodeInfo() {
+  if (!episodeData || !currentEpisode) return;
+
+  const currentEpisodeNum = parseInt(currentEpisode);
+  const episode = episodeData.find(ep => ep.episode_number === currentEpisodeNum);
+
+  if (episode) {
+    // Show episode info overlay
+    const overlay = document.createElement('div');
+    overlay.style.cssText = \`
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 20px;
+      border-radius: 10px;
+      text-align: center;
+      max-width: 80%;
+      z-index: 100;
+    \`;
+
+    overlay.innerHTML = \`
+      <h3>Episode \${episode.episode_number}: \${episode.name}</h3>
+      <p>\${episode.overview || 'No description available'}</p>
+      <p><small>Air date: \${episode.air_date || 'Unknown'}</small></p>
+    \`;
+
+    document.body.appendChild(overlay);
+
+    setTimeout(() => {
+      overlay.remove();
+    }, 5000);
+  }
+}
+
+// Mobile episode navigation event listeners
+if (mobilePrevEpisode) {
+  mobilePrevEpisode.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigateToEpisode('prev');
+    showControls();
+  });
+}
+
+if (mobileNextEpisode) {
+  mobileNextEpisode.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    navigateToEpisode('next');
+    showControls();
+  });
 }
 
 async function releaseWakeLock(){
@@ -1172,8 +1535,11 @@ document.addEventListener('keydown', (e)=>{
   if (e.code === 'Space'){ e.preventDefault(); togglePlay() }
   if (e.key === 'ArrowLeft'){ video.currentTime=Math.max(0,video.currentTime-10) }
   if (e.key === 'ArrowRight'){ video.currentTime=Math.min(video.duration,video.currentTime+10) }
+  if (e.key === 'ArrowUp' && currentSeason && currentEpisode){ navigateToEpisode('prev') }
+  if (e.key === 'ArrowDown' && currentSeason && currentEpisode){ navigateToEpisode('next') }
   if (e.key === 'f' || e.key === 'F'){ toggleFullscreen() }
   if (e.key === 'm' || e.key === 'M'){ video.muted=!video.muted; muteBtn.textContent = (video.muted?'🔇':'🔊') }
+  if (e.key === 'i' || e.key === 'I'){ showEpisodeInfo() }
 })
 
 document.addEventListener('visibilitychange', () => {
