@@ -764,8 +764,35 @@ hls.on(Hls.Events.MANIFEST_PARSED, () => {
       hls.audioTrack = id
       if (lockedLevel !== undefined && lockedLevel !== null && lockedLevel >= 0){
         hls.currentLevel = lockedLevel
-    let currentStreamHeaders = initialStreamHeaders || {};
-
+      }
+      buildAudioListFromHls()
+      if (!video.paused){ video.play().catch(()=>{}) }
+    })
+  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    // Safari / iOS: use native HLS
+    video.src = currentStreamUrl || initialStreamUrl
+    video.addEventListener('loadedmetadata', () => {
+      buildAudioListFromNative()
+    })
+    audioMenu.addEventListener('click', (e) => {
+      const item = e.target && e.target.closest ? e.target.closest('.audio-item') : null
+      if (!item) return
+      const idx = parseInt(item.dataset.index, 10)
+      if (Array.isArray(streamVariants) && streamVariants.length){
+        switchStreamVariant(idx)
+        return
+      }
+      const aTracks = video.audioTracks || []
+      for (let i = 0; i < aTracks.length; i++){
+        aTracks[i].enabled = (i === idx)
+      }
+      buildAudioListFromNative()
+      if (!video.paused){ video.play().catch(()=>{}) }
+    })
+  } else {
+    // Fallback: try setting src anyway
+    video.src = currentStreamUrl || initialStreamUrl
+  }
 }
 
 initPlayer()
