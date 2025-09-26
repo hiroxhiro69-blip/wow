@@ -126,16 +126,22 @@ self.addEventListener('fetch', (event) => {
     const [kstreamRes, nowowRes] = await Promise.all([
       fetch(kstreamEndpoint, {
         headers: {
-          "User-Agent": "Mozilla/5.0",
           "Accept": "application/json"
-        }
-      }).catch(() => null),
+        },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      }).catch((err) => {
+        console.debug('KStream API error:', err.message);
+        return null;
+      }),
       fetch(nowowEndpoint, {
         headers: {
-          "User-Agent": "Mozilla/5.0",
           "Accept": "application/json"
-        }
-      }).catch(() => null)
+        },
+        signal: AbortSignal.timeout(10000) // 10 second timeout
+      }).catch((err) => {
+        console.debug('Nowow API error:', err.message);
+        return null;
+      })
     ])
 
     const parseJsonSafe = async (res) => {
@@ -154,16 +160,22 @@ self.addEventListener('fetch', (event) => {
       if (kstreamRes.ok) {
         kstreamData = await parseJsonSafe(kstreamRes)
       } else {
+        console.debug(`KStream API returned ${kstreamRes.status}: ${kstreamRes.statusText}`)
         kstreamData = { streams: [] }
       }
+    } else {
+      console.debug('KStream API failed to respond')
     }
 
     if (nowowRes) {
       if (nowowRes.ok) {
         nowowData = await parseJsonSafe(nowowRes)
       } else {
+        console.debug(`Nowow API returned ${nowowRes.status}: ${nowowRes.statusText}`)
         nowowData = { streams: [] }
       }
+    } else {
+      console.debug('Nowow API failed to respond')
     }
 
     const escapeHtml = (value) => {
@@ -213,11 +225,34 @@ self.addEventListener('fetch', (event) => {
     height: 100%;
     border: 0;
   }
+  .error-message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 20px;
+    border-radius: 10px;
+    max-width: 80%;
+  }
+  .error-message h2 {
+    margin: 0 0 10px 0;
+    color: #e50914;
+  }
+  .error-message p {
+    margin: 0;
+    color: #ccc;
+  }
 </style>
 </head>
 <body>
   <div id="wrapper">
     <iframe src="${fallbackUrl}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+    <div class="error-message">
+      <h2>Stream Unavailable</h2>
+      <p>Unable to load video from primary sources. Using backup player.</p>
+    </div>
   </div>
 </body>
 </html>`
@@ -231,7 +266,11 @@ self.addEventListener('fetch', (event) => {
     const annotatedKstream = kstreamStreams.map((s) => ({ ...s, source: "HiroXStream" }))
     const annotatedNowow = nowowStreams.map((s) => ({ ...s, source: "nowow" }))
 
-    if (!annotatedKstream.length && !annotatedNowow.length) {
+    // Check if we have any valid streams
+    const hasValidStreams = annotatedKstream.some(s => s.url) || annotatedNowow.some(s => s.url)
+
+    if (!hasValidStreams) {
+      console.debug('No valid streams found, using fallback player')
       return buildVidlinkFallbackResponse()
     }
 
@@ -280,6 +319,7 @@ self.addEventListener('fetch', (event) => {
     poster = kstreamData?.poster || kstreamData?.thumbnail || nowowData?.poster || nowowData?.thumbnail || ""
 
     if (!videoLink) {
+      console.debug('No valid video link found, using fallback player')
       return buildVidlinkFallbackResponse()
     }
 
