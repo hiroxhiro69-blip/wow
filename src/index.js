@@ -286,15 +286,16 @@ self.addEventListener('fetch', (event) => {
     let nextEpisodeHref = ""
     if (
       contentType === "series" &&
-      chosenStream?.source === "HiroXStream" &&
-      typeof seasonParam === "string" &&
-      typeof episodeParam === "string"
+      typeof episodeParam === "string" &&
+      episodeParam !== ""
     ) {
       const parsedEpisode = parseInt(episodeParam, 10)
       if (!Number.isNaN(parsedEpisode)) {
         const nextEpisodeParams = new URLSearchParams()
         nextEpisodeParams.set("tmdb", tmdbId)
-        nextEpisodeParams.set("season", seasonParam)
+        if (typeof seasonParam === "string" && seasonParam !== "") {
+          nextEpisodeParams.set("season", seasonParam)
+        }
         nextEpisodeParams.set("episode", String(parsedEpisode + 1))
         nextEpisodeHref = `?${nextEpisodeParams.toString()}`
       }
@@ -304,8 +305,8 @@ self.addEventListener('fetch', (event) => {
     if (contentType === "series") {
       const seasonLabel = typeof seasonParam === "string" && seasonParam ? `S${seasonParam}` : ""
       const episodeLabel = typeof episodeParam === "string" && episodeParam ? `E${episodeParam}` : ""
-      const meta = [seasonLabel, episodeLabel].filter(Boolean).join(" · ")
-      overlayTitle = [title, meta].filter(Boolean).join(" • ")
+      const meta = [seasonLabel, episodeLabel].filter(Boolean).join("   ")
+      overlayTitle = [title, meta].filter(Boolean).join(" \n ")
     }
 
     if (!poster) {
