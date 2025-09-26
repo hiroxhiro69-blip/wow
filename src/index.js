@@ -1,598 +1,323 @@
 addEventListener("fetch", event => {
-  event.respondWith(handleRequest(event.request))
+event.respondWith(handleRequest(event.request))
 })
 
 async function fetchText(url) {
-  const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } })
-  return await res.text()
+const res = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } })
+return await res.text()
 }
 
 async function handleRequest(request) {
-  const url = new URL(request.url)
-  const path = url.pathname
+const url = new URL(request.url)
+const path = url.pathname
 
-  if (path === '/manifest.webmanifest') {
-    const manifest = {
-      name: 'HiroX Stream Player',
-      short_name: 'HiroXStream',
-      description: 'Stream HiroX content with a mobile-first player experience.',
-      start_url: '/',
-      scope: '/',
-      display: 'standalone',
-      background_color: '#000000',
-      theme_color: '#000000',
-      lang: 'en',
-      icons: [
-        {
-          src: 'https://hiroxstream.pages.dev/android-chrome-192x192.png',
-          sizes: '192x192',
-          type: 'image/png'
-        },
-        {
-          src: 'https://hiroxstream.pages.dev/android-chrome-512x512.png',
-          sizes: '512x512',
-          type: 'image/png'
-        }
-      ]
-    }
-    return new Response(JSON.stringify(manifest, null, 2), {
-      headers: {
-        'Content-Type': 'application/manifest+json',
-        'Cache-Control': 'public, max-age=0, must-revalidate'
-      }
-    })
-  }
+if (path === '/manifest.webmanifest') {
+const manifest = {
+name: 'HiroX Stream Player',
+short_name: 'HiroXStream',
+description: 'Stream HiroX content with a mobile-first player experience.',
+start_url: '/',
+scope: '/',
+display: 'standalone',
+background_color: '#000000',
+theme_color: '#000000',
+lang: 'en',
+icons: [
+{
+src: 'https://hiroxstream.pages.dev/android-chrome-192x192.png',
+sizes: '192x192',
+type: 'image/png'
+},
+{
+src: 'https://hiroxstream.pages.dev/android-chrome-512x512.png',
+sizes: '512x512',
+type: 'image/png'
+}
+]
+}
+return new Response(JSON.stringify(manifest, null, 2), {
+headers: {
+'Content-Type': 'application/manifest+json',
+'Cache-Control': 'public, max-age=0, must-revalidate'
+}
+})
+}
 
-  if (path === '/sw.js') {
-    const swScript = `const CACHE_VERSION = 'hiroxstream-shell-v1';
+if (path === '/sw.js') {
+const swScript = `const CACHE_VERSION = 'hiroxstream-shell-v1';
 self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
+event.waitUntil(self.skipWaiting());
 });
 self.addEventListener('activate', (event) => {
-  event.waitUntil(self.clients.claim());
+event.waitUntil(self.clients.claim());
 });
 self.addEventListener('fetch', (event) => {
-  if (event.request.method !== 'GET') return;
-  if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).catch(() => new Response('You appear to be offline.', {
-      headers: { 'Content-Type': 'text/plain' }
-    })));
-  }
+if (event.request.method !== 'GET') return;
+if (event.request.mode === 'navigate') {
+event.respondWith(fetch(event.request).catch(() => new Response('You appear to be offline.', {
+headers: { 'Content-Type': 'text/plain' }
+})));
+}
 });
 `
-    return new Response(swScript, {
-      headers: {
-        'Content-Type': 'application/javascript',
-        'Cache-Control': 'public, max-age=0, must-revalidate'
-      }
-    })
-  }
+return new Response(swScript, {
+headers: {
+'Content-Type': 'application/javascript',
+'Cache-Control': 'public, max-age=0, must-revalidate'
+}
+})
+}
 
-  const tmdbId = url.searchParams.get("tmdb")
-  if (!tmdbId) return new Response("Missing ?tmdb= parameter", { status: 400 })
+const tmdbId = url.searchParams.get("tmdb")
+if (!tmdbId) return new Response("Missing ?tmdb= parameter", { status: 400 })
 
-  try {
-    const seasonParam = url.searchParams.get("season")
-    const episodeParam = url.searchParams.get("episode")
-    const contentType = seasonParam && episodeParam ? "series" : "movie"
+try {
+const seasonParam = url.searchParams.get("season")
+const episodeParam = url.searchParams.get("episode")
+const contentType = seasonParam && episodeParam ? "series" : "movie"
 
-    if (contentType === "series" && (!seasonParam || !episodeParam)) {
-      return new Response("Missing ?season=&episode= parameters for series request", { status: 400 })
-    }
+if (contentType === "series" && (!seasonParam || !episodeParam)) {
+return new Response("Missing ?season=&episode= parameters for series request", { status: 400 })
+}
 
-    let videoLink = ""
-    let title = ""
-    let poster = ""
-    let streamHeaders = {}
-    let streamLanguage = "Default"
-    let streamVariants = []
-    let seasonsData = null
-    let episodesData = null
+let videoLink = ""
+let title = ""
+let poster = ""
+let streamHeaders = {}
+let streamLanguage = "Default"
+let streamVariants = []
 
-    // Fetch TMDB data for series information
-    const tmdbEndpoint = `https://api.themoviedb.org/3/tv/${tmdbId}?api_key=YOUR_TMDB_API_KEY`
-    const tmdbRes = await fetch(tmdbEndpoint, {
-      headers: {
-        "Accept": "application/json"
-      },
-      signal: AbortSignal.timeout(8000)
-    }).catch((err) => {
-      console.debug('TMDB API error:', err.message);
-      return null;
-    })
+const kstreamEndpoint = contentType === "series"
+? `https://kstream.vercel.app/api/content/tv/${tmdbId}/${seasonParam}/${episodeParam}`
+: `https://kstream.vercel.app/api/content/movie/${tmdbId}`
 
-    if (tmdbRes && tmdbRes.ok) {
-      const tmdbData = await tmdbRes.json()
-      title = tmdbData.name || `TMDB #${tmdbId}`
-      poster = tmdbData.poster_path ? `https://image.tmdb.org/t/p/w500${tmdbData.poster_path}` : ""
+const nowowEndpoint = contentType === "series"
+? `https://nowow.xdtohin2.workers.dev/tv/${tmdbId}/${seasonParam}/${episodeParam}`
+: `https://nowow.xdtohin2.workers.dev/movie/${tmdbId}`
 
-      // Fetch seasons data
-      const seasonsEndpoint = `https://api.themoviedb.org/3/tv/${tmdbId}/seasons?api_key=YOUR_TMDB_API_KEY`
-      const seasonsRes = await fetch(seasonsEndpoint, {
-        headers: {
-          "Accept": "application/json"
-        },
-        signal: AbortSignal.timeout(8000)
-      }).catch((err) => {
-        console.debug('TMDB Seasons API error:', err.message);
-        return null;
-      })
+const [kstreamRes, nowowRes] = await Promise.all([
+fetch(kstreamEndpoint, {
+headers: {
+"Accept": "application/json"
+},
+signal: AbortSignal.timeout(10000) // 10 second timeout
+}).catch((err) => {
+console.debug('KStream API error:', err.message);
+return null;
+}),
+fetch(nowowEndpoint, {
+headers: {
+"Accept": "application/json"
+},
+signal: AbortSignal.timeout(10000) // 10 second timeout
+}).catch((err) => {
+console.debug('Nowow API error:', err.message);
+return null;
+})
+])
 
-      if (seasonsRes && seasonsRes.ok) {
-        seasonsData = await seasonsRes.json()
-      }
-    }
+const parseJsonSafe = async (res) => {
+if (!res) return null
+try {
+return await res.json()
+} catch (_err) {
+return null
+}
+}
 
-    // If no specific season/episode, show season/episode selector
-    if (contentType === "movie" || !seasonsData) {
-      // Show season/episode selector page
-      const html = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${title} - Select Episode</title>
-<style>
-  * {
-    margin: 0;
-    padding: 0;
-    box-sizing: border-box;
-  }
-  body {
-    background: #000;
-    color: #fff;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-    min-height: 100vh;
-    padding: 20px;
-  }
-  .container {
-    max-width: 1200px;
-    margin: 0 auto;
-  }
-  .header {
-    display: flex;
-    align-items: center;
-    gap: 20px;
-    margin-bottom: 30px;
-  }
-  .poster {
-    width: 120px;
-    height: 180px;
-    background: #333;
-    border-radius: 8px;
-    object-fit: cover;
-  }
-  .title-info h1 {
-    font-size: 2rem;
-    margin-bottom: 10px;
-  }
-  .seasons-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 30px;
-  }
-  .season-card {
-    background: #111;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 15px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  .season-card:hover {
-    background: #222;
-    border-color: #e50914;
-  }
-  .season-card h3 {
-    font-size: 1.1rem;
-    margin-bottom: 5px;
-  }
-  .season-card p {
-    color: #ccc;
-    font-size: 0.9rem;
-  }
-  .episodes-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-    gap: 15px;
-  }
-  .episode-card {
-    background: #111;
-    border: 1px solid #333;
-    border-radius: 8px;
-    padding: 15px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-  }
-  .episode-card:hover {
-    background: #222;
-    border-color: #e50914;
-  }
-  .episode-header {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-  .episode-number {
-    background: #e50914;
-    color: #fff;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-weight: bold;
-    font-size: 0.9rem;
-  }
-  .episode-title {
-    flex: 1;
-    font-weight: 600;
-  }
-  .episode-overview {
-    color: #ccc;
-    font-size: 0.9rem;
-    line-height: 1.4;
-  }
-  .loading {
-    text-align: center;
-    padding: 50px;
-    font-size: 1.2rem;
-  }
-  .back-btn {
-    background: #e50914;
-    color: #fff;
-    border: none;
-    padding: 10px 20px;
-    border-radius: 5px;
-    cursor: pointer;
-    margin-bottom: 20px;
-    font-size: 1rem;
-  }
-  .back-btn:hover {
-    background: #f40612;
-  }
-</style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <img src="${poster}" alt="${title}" class="poster" onerror="this.style.display='none'">
-      <div class="title-info">
-        <h1>${title}</h1>
-        <p>Select a season and episode to watch</p>
-      </div>
-    </div>
+let kstreamData = null
+let nowowData = null
 
-    <div id="seasons-container">
-      <h2>Seasons</h2>
-      <div class="seasons-grid" id="seasons-grid">
-        <div class="loading">Loading seasons...</div>
-      </div>
-    </div>
+if (kstreamRes) {
+if (kstreamRes.ok) {
+kstreamData = await parseJsonSafe(kstreamRes)
+} else {
+console.debug(`KStream API returned ${kstreamRes.status}: ${kstreamRes.statusText}`)
+kstreamData = { streams: [] }
+}
+} else {
+console.debug('KStream API failed to respond')
+}
 
-    <div id="episodes-container" style="display: none;">
-      <button class="back-btn" onclick="showSeasons()">← Back to Seasons</button>
-      <h2 id="current-season-title">Season 1</h2>
-      <div class="episodes-grid" id="episodes-grid">
-        <div class="loading">Loading episodes...</div>
-      </div>
-    </div>
-  </div>
+if (nowowRes) {
+if (nowowRes.ok) {
+nowowData = await parseJsonSafe(nowowRes)
+} else {
+console.debug(`Nowow API returned ${nowowRes.status}: ${nowowRes.statusText}`)
+nowowData = { streams: [] }
+}
+} else {
+console.debug('Nowow API failed to respond')
+}
 
-  <script>
-    const tmdbId = '${tmdbId}';
-    let currentSeason = null;
-    let seasonsData = ${JSON.stringify(seasonsData)};
+const escapeHtml = (value) => {
+if (typeof value !== "string") return ""
+const replacements = {
+"&": "&amp;",
+"<": "&lt;",
+">": "&gt;",
+'"': "&quot;",
+"'": "&#39;"
+}
+return value.replace(/[&<>"']/g, (char) => replacements[char] || char)
+}
 
-    function showSeasons() {
-      document.getElementById('seasons-container').style.display = 'block';
-      document.getElementById('episodes-container').style.display = 'none';
-    }
+const buildVidlinkFallbackResponse = () => {
+const fallbackTitle = kstreamData?.title || nowowData?.title || `TMDB #${tmdbId}`
+const safeTitle = escapeHtml(fallbackTitle)
+const safeTmdbId = encodeURIComponent(tmdbId)
+const seasonSegment = encodeURIComponent(seasonParam || "")
+const episodeSegment = encodeURIComponent(episodeParam || "")
+const fallbackUrl = contentType === "series"
+? `https://vidfast.pro/tv/${safeTmdbId}/${seasonSegment}/${episodeSegment}`
+: `https://vidfast.pro/movie/${safeTmdbId}`
 
-    function showEpisodes(seasonNumber, seasonName) {
-      currentSeason = seasonNumber;
-      document.getElementById('seasons-container').style.display = 'none';
-      document.getElementById('episodes-container').style.display = 'block';
-      document.getElementById('current-season-title').textContent = seasonName;
-
-      // Fetch episodes for this season
-      fetchEpisodes(seasonNumber);
-    }
-
-    async function fetchEpisodes(seasonNumber) {
-      const episodesGrid = document.getElementById('episodes-grid');
-      episodesGrid.innerHTML = '<div class="loading">Loading episodes...</div>';
-
-      try {
-        const response = await fetch(\`https://api.themoviedb.org/3/tv/\${tmdbId}/season/\${seasonNumber}?api_key=YOUR_TMDB_API_KEY\`);
-        const data = await response.json();
-
-        episodesGrid.innerHTML = '';
-
-        data.episodes.forEach(episode => {
-          const episodeCard = document.createElement('div');
-          episodeCard.className = 'episode-card';
-          episodeCard.onclick = () => playEpisode(seasonNumber, episode.episode_number);
-
-          episodeCard.innerHTML = \`
-            <div class="episode-header">
-              <div class="episode-number">E\${episode.episode_number}</div>
-              <div class="episode-title">\${episode.name}</div>
-            </div>
-            <div class="episode-overview">\${episode.overview || 'No description available'}</div>
-          \`;
-
-          episodesGrid.appendChild(episodeCard);
-        });
-      } catch (error) {
-        episodesGrid.innerHTML = '<div class="loading">Error loading episodes</div>';
-      }
-    }
-
-    function playEpisode(season, episode) {
-      const url = new URL(window.location);
-      url.searchParams.set('season', season);
-      url.searchParams.set('episode', episode);
-      window.location.href = url.toString();
-    }
-
-    // Load seasons if data is available
-    if (seasonsData && seasonsData.seasons) {
-      const seasonsGrid = document.getElementById('seasons-grid');
-      seasonsGrid.innerHTML = '';
-
-      seasonsData.seasons.forEach(season => {
-        if (season.season_number === 0) return; // Skip specials
-
-        const seasonCard = document.createElement('div');
-        seasonCard.className = 'season-card';
-        seasonCard.onclick = () => showEpisodes(season.season_number, season.name);
-
-        seasonCard.innerHTML = \`
-          <h3>\${season.name}</h3>
-          <p>\${season.episode_count} episodes</p>
-        \`;
-
-        seasonsGrid.appendChild(seasonCard);
-      });
-    }
-  </script>
-</body>
-</html>`
-
-      return new Response(html, { headers: { "Content-Type": "text/html" } })
-    }
-
-    const kstreamEndpoint = contentType === "series"
-      ? `https://kstream.vercel.app/api/content/tv/${tmdbId}/${seasonParam}/${episodeParam}`
-      : `https://kstream.vercel.app/api/content/movie/${tmdbId}`
-
-    const nowowEndpoint = contentType === "series"
-      ? `https://nowow.xdtohin2.workers.dev/tv/${tmdbId}/${seasonParam}/${episodeParam}`
-      : `https://nowow.xdtohin2.workers.dev/movie/${tmdbId}`
-
-    const [kstreamRes, nowowRes] = await Promise.all([
-      fetch(kstreamEndpoint, {
-        headers: {
-          "Accept": "application/json"
-        },
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      }).catch((err) => {
-        console.debug('KStream API error:', err.message);
-        return null;
-      }),
-      fetch(nowowEndpoint, {
-        headers: {
-          "Accept": "application/json"
-        },
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      }).catch((err) => {
-        console.debug('Nowow API error:', err.message);
-        return null;
-      })
-    ])
-
-    const parseJsonSafe = async (res) => {
-      if (!res) return null
-      try {
-        return await res.json()
-      } catch (_err) {
-        return null
-      }
-    }
-
-    let kstreamData = null
-    let nowowData = null
-
-    if (kstreamRes) {
-      if (kstreamRes.ok) {
-        kstreamData = await parseJsonSafe(kstreamRes)
-      } else {
-        console.debug(`KStream API returned ${kstreamRes.status}: ${kstreamRes.statusText}`)
-        kstreamData = { streams: [] }
-      }
-    } else {
-      console.debug('KStream API failed to respond')
-    }
-
-    if (nowowRes) {
-      if (nowowRes.ok) {
-        nowowData = await parseJsonSafe(nowowRes)
-      } else {
-        console.debug(`Nowow API returned ${nowowRes.status}: ${nowowRes.statusText}`)
-        nowowData = { streams: [] }
-      }
-    } else {
-      console.debug('Nowow API failed to respond')
-    }
-
-    const escapeHtml = (value) => {
-      if (typeof value !== "string") return ""
-      const replacements = {
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-      }
-      return value.replace(/[&<>"']/g, (char) => replacements[char] || char)
-    }
-
-    const buildVidlinkFallbackResponse = () => {
-      const fallbackTitle = kstreamData?.title || nowowData?.title || `TMDB #${tmdbId}`
-      const safeTitle = escapeHtml(fallbackTitle)
-      const safeTmdbId = encodeURIComponent(tmdbId)
-      const seasonSegment = encodeURIComponent(seasonParam || "")
-      const episodeSegment = encodeURIComponent(episodeParam || "")
-      const fallbackUrl = contentType === "series"
-        ? `https://vidfast.pro/tv/${safeTmdbId}/${seasonSegment}/${episodeSegment}`
-        : `https://vidfast.pro/movie/${safeTmdbId}`
-
-      const html = `<!DOCTYPE html>
+const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${safeTitle}</title>
 <style>
-  html, body {
-    margin: 0;
-    height: 100%;
-    background: #000;
-    color: #fff;
-    font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif;
-  }
-  #wrapper {
-    position: relative;
-    width: 100vw;
-    height: 100vh;
-    overflow: hidden;
-  }
-  iframe {
-    width: 100%;
-    height: 100%;
-    border: 0;
-  }
-  .error-message {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-    background: rgba(0, 0, 0, 0.8);
-    padding: 20px;
-    border-radius: 10px;
-    max-width: 80%;
-  }
-  .error-message h2 {
-    margin: 0 0 10px 0;
-    color: #e50914;
-  }
-  .error-message p {
-    margin: 0;
-    color: #ccc;
-  }
+html, body {
+margin: 0;
+height: 100%;
+background: #000;
+color: #fff;
+font-family: system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, sans-serif;
+}
+#wrapper {
+position: relative;
+width: 100vw;
+height: 100vh;
+overflow: hidden;
+}
+iframe {
+width: 100%;
+height: 100%;
+border: 0;
+}
+.error-message {
+position: absolute;
+top: 50%;
+left: 50%;
+transform: translate(-50%, -50%);
+text-align: center;
+background: rgba(0, 0, 0, 0.8);
+padding: 20px;
+border-radius: 10px;
+max-width: 80%;
+}
+.error-message h2 {
+margin: 0 0 10px 0;
+color: #e50914;
+}
+.error-message p {
+margin: 0;
+color: #ccc;
+}
 </style>
 </head>
 <body>
-  <div id="wrapper">
-    <iframe src="${fallbackUrl}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
-    <div class="error-message">
-      <h2>Stream Unavailable</h2>
-      <p>Unable to load video from primary sources. Using backup player.</p>
-    </div>
-  </div>
+<div id="wrapper">
+<iframe src="${fallbackUrl}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
+<div class="error-message">
+<h2>Stream Unavailable</h2>
+<p>Unable to load video from primary sources. Using backup player.</p>
+</div>
+</div>
 </body>
 </html>`
 
-      return new Response(html, { headers: { "Content-Type": "text/html" } })
-    }
+return new Response(html, { headers: { "Content-Type": "text/html" } })
+}
 
-    const kstreamStreams = Array.isArray(kstreamData?.streams) ? kstreamData.streams : []
-    const nowowStreams = Array.isArray(nowowData?.streams) ? nowowData.streams : []
+const kstreamStreams = Array.isArray(kstreamData?.streams) ? kstreamData.streams : []
+const nowowStreams = Array.isArray(nowowData?.streams) ? nowowData.streams : []
 
-    const annotatedKstream = kstreamStreams.map((s) => ({ ...s, source: "HiroXStream" }))
-    const annotatedNowow = nowowStreams.map((s) => ({ ...s, source: "nowow" }))
+const annotatedKstream = kstreamStreams.map((s) => ({ ...s, source: "HiroXStream" }))
+const annotatedNowow = nowowStreams.map((s) => ({ ...s, source: "nowow" }))
 
-    // Check if we have any valid streams
-    const hasValidStreams = annotatedKstream.some(s => s.url) || annotatedNowow.some(s => s.url)
+// Check if we have any valid streams
+const hasValidStreams = annotatedKstream.some(s => s.url) || annotatedNowow.some(s => s.url)
 
-    if (!hasValidStreams) {
-      console.debug('No valid streams found, using fallback player')
-      return buildVidlinkFallbackResponse()
-    }
+if (!hasValidStreams) {
+console.debug('No valid streams found, using fallback player')
+return buildVidlinkFallbackResponse()
+}
 
-    const pickPreferredStream = (streams) => {
-      const lower = (value) => (typeof value === "string" ? value.toLowerCase() : "")
-      const english = streams.find(s => lower(s.language).includes("english"))
-      return english || streams[0]
-    }
+const pickPreferredStream = (streams) => {
+const lower = (value) => (typeof value === "string" ? value.toLowerCase() : "")
+const english = streams.find(s => lower(s.language).includes("english"))
+return english || streams[0]
+}
 
-    const chosenKStream = annotatedKstream.length ? pickPreferredStream(annotatedKstream) : null
-    const chosenNowowStream = annotatedNowow.length ? pickPreferredStream(annotatedNowow) : null
+const chosenKStream = annotatedKstream.length ? pickPreferredStream(annotatedKstream) : null
+const chosenNowowStream = annotatedNowow.length ? pickPreferredStream(annotatedNowow) : null
 
-    let chosenStream = null
-    if (chosenNowowStream && chosenNowowStream.url) {
-      chosenStream = chosenNowowStream
-    } else if (chosenKStream && chosenKStream.url) {
-      chosenStream = chosenKStream
-    }
+let chosenStream = null
+if (chosenNowowStream && chosenNowowStream.url) {
+chosenStream = chosenNowowStream
+} else if (chosenKStream && chosenKStream.url) {
+chosenStream = chosenKStream
+}
 
-    videoLink = chosenStream?.url || ""
-    streamHeaders = chosenStream?.headers || {}
-    streamLanguage = chosenStream?.language || "Default"
+videoLink = chosenStream?.url || ""
+streamHeaders = chosenStream?.headers || {}
+streamLanguage = chosenStream?.language || "Default"
 
-    const combinedStreams = (() => {
-      const order = [...annotatedNowow, ...annotatedKstream]
-      const seen = new Set()
-      const unique = []
-      for (const entry of order) {
-        if (!entry || !entry.url) continue
-        if (seen.has(entry.url)) continue
-        seen.add(entry.url)
-        unique.push(entry)
-      }
-      return unique
-    })()
+const combinedStreams = (() => {
+const order = [...annotatedNowow, ...annotatedKstream]
+const seen = new Set()
+const unique = []
+for (const entry of order) {
+if (!entry || !entry.url) continue
+if (seen.has(entry.url)) continue
+seen.add(entry.url)
+unique.push(entry)
+}
+return unique
+})()
 
-    streamVariants = combinedStreams.map((s, idx) => ({
-      id: idx,
-      language: s.language || `Stream ${idx + 1}`,
-      url: s.url,
-      headers: s.headers || {},
-      source: s.source || "unknown"
-    }))
+streamVariants = combinedStreams.map((s, idx) => ({
+id: idx,
+language: s.language || `Stream ${idx + 1}`,
+url: s.url,
+headers: s.headers || {},
+source: s.source || "unknown"
+}))
 
-    title = kstreamData?.title || nowowData?.title || `TMDB #${tmdbId}`
-    poster = kstreamData?.poster || kstreamData?.thumbnail || nowowData?.poster || nowowData?.thumbnail || ""
+title = kstreamData?.title || nowowData?.title || `TMDB #${tmdbId}`
+poster = kstreamData?.poster || kstreamData?.thumbnail || nowowData?.poster || nowowData?.thumbnail || ""
 
-    if (!videoLink) {
-      console.debug('No valid video link found, using fallback player')
-      return buildVidlinkFallbackResponse()
-    }
+if (!videoLink) {
+console.debug('No valid video link found, using fallback player')
+return buildVidlinkFallbackResponse()
+}
 
-    let overlayTitle = title
-    if (contentType === "series") {
-      const seasonLabel = typeof seasonParam === "string" && seasonParam ? `S${seasonParam}` : ""
-      const episodeLabel = typeof episodeParam === "string" && episodeParam ? `E${episodeParam}` : ""
-      const meta = [seasonLabel, episodeLabel].filter(Boolean).join("   ")
-      overlayTitle = [title, meta].filter(Boolean).join(" \n ")
-    }
+let overlayTitle = title
+if (contentType === "series") {
+const seasonLabel = typeof seasonParam === "string" && seasonParam ? `S${seasonParam}` : ""
+const episodeLabel = typeof episodeParam === "string" && episodeParam ? `E${episodeParam}` : ""
+const meta = [seasonLabel, episodeLabel].filter(Boolean).join(" ")
+overlayTitle = [title, meta].filter(Boolean).join(" \n ")
+}
 
-    if (!poster) {
-      poster = ""
-    }
+if (!poster) {
+poster = ""
+}
 
-    if (!title) {
-      title = "HiroXStream"
-    }
+if (!title) {
+title = "HiroXStream"
+}
 
-    const storageKeyParts = ["player", contentType, tmdbId]
-    if (contentType === "series") {
-      storageKeyParts.push(`s${seasonParam || "0"}e${episodeParam || "0"}`)
-    }
-    const storageKey = storageKeyParts.filter(Boolean).join(":")
+const storageKeyParts = ["player", contentType, tmdbId]
+if (contentType === "series") {
+storageKeyParts.push(`s${seasonParam || "0"}e${episodeParam || "0"}`)
+}
+const storageKey = storageKeyParts.filter(Boolean).join(":")
 
-    const html = `
+const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -666,20 +391,20 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 
 /* Mobile-first tweaks */
 @media (max-width: 768px) {
-  #controls { padding:20px 12px calc(30px + env(safe-area-inset-bottom)); }
-  .controls-bottom { flex-direction:column; align-items:stretch; gap:14px; }
-  .desktop-actions { display:none; }
-  .main-controls { background:rgba(0,0,0,0.4); border-radius:999px; padding:10px 14px; justify-content:space-between; align-items:center; }
-  .round-btn { display:flex; font-size:18px; background:rgba(255,255,255,0.14); }
-  .round-btn.active { background:#e50914; }
-  #mobilePlayToggle { width:52px; height:52px; font-size:20px; }
-  .mobile-actions { display:flex; flex:1; justify-content:flex-end; gap:10px; }
-  .time { flex:1; text-align:center; font-size:13px; color:#f5f5f5; }
-  #seekContainer { height:6px; margin:4px 0 8px; }
-  #volumeContainer { display:none; }
-  #audioMenu, #qualityMenu, #speedMenu { position:fixed; left:0; right:0; bottom:0; border-radius:16px 16px 0 0; padding-bottom:calc(18px + env(safe-area-inset-bottom)); margin:0; max-height:50vh; }
-  .audio-item, .menu-item { padding:16px 20px; font-size:16px; }
-  #zoneLeft, #zoneRight { width:48%; }
+#controls { padding:20px 12px calc(30px + env(safe-area-inset-bottom)); }
+.controls-bottom { flex-direction:column; align-items:stretch; gap:14px; }
+.desktop-actions { display:none; }
+.main-controls { background:rgba(0,0,0,0.4); border-radius:999px; padding:10px 14px; justify-content:space-between; align-items:center; }
+.round-btn { display:flex; font-size:18px; background:rgba(255,255,255,0.14); }
+.round-btn.active { background:#e50914; }
+#mobilePlayToggle { width:52px; height:52px; font-size:20px; }
+.mobile-actions { display:flex; flex:1; justify-content:flex-end; gap:10px; }
+.time { flex:1; text-align:center; font-size:13px; color:#f5f5f5; }
+#seekContainer { height:6px; margin:4px 0 8px; }
+#volumeContainer { display:none; }
+#audioMenu, #qualityMenu, #speedMenu { position:fixed; left:0; right:0; bottom:0; border-radius:16px 16px 0 0; padding-bottom:calc(18px + env(safe-area-inset-bottom)); margin:0; max-height:50vh; }
+.audio-item, .menu-item { padding:16px 20px; font-size:16px; }
+#zoneLeft, #zoneRight { width:48%; }
 }
 
 /* Control layout */
@@ -709,51 +434,57 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 </head>
 <body>
 <div id="player">
-  <video id="video" poster="${poster}" autoplay muted preload="auto" playsinline webkit-playsinline x5-playsinline></video>
-  <div id="overlay">${overlayTitle}</div>
-  <div id="watermark">HiroXStream</div>
-  <button id="centerPlay">⏯</button>
-  <div id="spinner"></div>
-  <div id="brandingOverlay">
-    <div class="logo">HiroXStream</div>
-    <div class="pulse"></div>
-    <div class="tagline">Loading Experience</div>
-  </div>
-  <div id="zoneLeft"></div>
-  <div id="zoneRight"></div>
-  <div id="seekBadgeLeft" class="seek-badge left">
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
-    <span>-10s</span>
-  </div>
-  <div id="seekBadgeRight" class="seek-badge right">
-    <span>+10s</span>
-    <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m8.59 16.59 1.41 1.41L16 12l-5.99-6L8.6 7.41 13.17 12z"/></svg>
-  </div>
-  <div id="rotateOverlay"><div class="box">Rotate your device for the best experience</div></div>
-  <div id="controls">
-    <div id="seekContainer"><div id="seekProgress"></div></div>
-    <div class="controls-bottom">
-      <div class="main-controls">
-        <button class="round-btn" id="mobilePlayToggle" aria-label="Play/Pause">▶</button>
-        <span class="time" id="timeLabel">00:00 / 00:00</span>
-        <div class="mobile-actions">
-          <button class="round-btn" id="mobilePrevEpisode" aria-label="Previous Episode">⏮</button>
-          <button class="round-btn" id="mobileNextEpisode" aria-label="Next Episode">⏭</button>
-        </div>
-      </div>
-      <div class="desktop-actions">
-        <div id="volumeContainer">
-          <button class="btn" id="muteBtn" aria-label="Mute" title="Mute">🔊</button>
-          <input type="range" id="volume" min="0" max="1" step="0.05" value="1" />
-        </div>
-        <button class="btn" id="prevEpisodeBtn" aria-label="Previous Episode" title="Previous Episode">⏮</button>
-        <button class="btn" id="nextEpisodeBtn" aria-label="Next Episode" title="Next Episode">⏭</button>
-      </div>
-    </div>
-    <div id="audioMenu"></div>
-    <div id="qualityMenu"></div>
-    <div id="speedMenu"></div>
-  </div>
+<video id="video" poster="${poster}" autoplay muted preload="auto" playsinline webkit-playsinline x5-playsinline></video>
+<div id="overlay">${overlayTitle}</div>
+<div id="watermark">HiroXStream</div>
+<button id="centerPlay">⏯</button>
+<div id="spinner"></div>
+<div id="brandingOverlay">
+<div class="logo">HiroXStream</div>
+<div class="pulse"></div>
+<div class="tagline">Loading Experience</div>
+</div>
+<div id="zoneLeft"></div>
+<div id="zoneRight"></div>
+<div id="seekBadgeLeft" class="seek-badge left">
+<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/></svg>
+<span>-10s</span>
+</div>
+<div id="seekBadgeRight" class="seek-badge right">
+<span>+10s</span>
+<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m8.59 16.59 1.41 1.41L16 12l-5.99-6L8.6 7.41 13.17 12z"/></svg>
+</div>
+<div id="rotateOverlay"><div class="box">Rotate your device for the best experience</div></div>
+<div id="controls">
+<div id="seekContainer"><div id="seekProgress"></div></div>
+<div class="controls-bottom">
+<div class="main-controls">
+<button class="round-btn" id="mobilePlayToggle" aria-label="Play/Pause">▶</button>
+<span class="time" id="timeLabel">00:00 / 00:00</span>
+<div class="mobile-actions">
+<button class="round-btn" id="mobileMute" aria-label="Mute">🔊</button>
+<button class="round-btn" id="mobileAudio" aria-label="Audio tracks">🎵</button>
+<button class="round-btn" id="mobileQuality" aria-label="Quality">HD</button>
+<button class="round-btn" id="mobileSpeed" aria-label="Playback speed">⏱</button>
+<button class="round-btn" id="mobileFullscreen" aria-label="Fullscreen">⛶</button>
+</div>
+</div>
+<div class="desktop-actions">
+<div id="volumeContainer">
+<button class="btn" id="muteBtn" aria-label="Mute" title="Mute">🔊</button>
+<input type="range" id="volume" min="0" max="1" step="0.05" value="1" />
+</div>
+<button class="btn" id="audioBtn" aria-label="Audio tracks" title="Audio tracks">Audio ▾</button>
+<button class="btn" id="qualityBtn" aria-label="Quality" title="Quality">Quality ▾</button>
+<button class="btn" id="speedBtn" aria-label="Playback speed" title="Playback speed">Speed ▾</button>
+<button class="btn" id="pipBtn" aria-label="Picture in picture" title="Picture in picture">PiP</button>
+<button class="btn" id="fullscreen" aria-label="Fullscreen" title="Fullscreen">⛶</button>
+</div>
+</div>
+<div id="audioMenu"></div>
+<div id="qualityMenu"></div>
+<div id="speedMenu"></div>
+</div>
 </div>
 <script>
 const video = document.getElementById("video");
@@ -778,10 +509,12 @@ const rotateOverlay = document.getElementById("rotateOverlay");
 const muteBtn = document.getElementById("muteBtn");
 const volume = document.getElementById("volume");
 const timeLabel = document.getElementById("timeLabel");
-const mobilePrevEpisode = document.getElementById("mobilePrevEpisode");
-const mobileNextEpisode = document.getElementById("mobileNextEpisode");
-const prevEpisodeBtn = document.getElementById("prevEpisodeBtn");
-const nextEpisodeBtn = document.getElementById("nextEpisodeBtn");
+const mobilePlayToggle = document.getElementById("mobilePlayToggle");
+const mobileMute = document.getElementById("mobileMute");
+const mobileAudio = document.getElementById("mobileAudio");
+const mobileQuality = document.getElementById("mobileQuality");
+const mobileSpeed = document.getElementById("mobileSpeed");
+const mobileFullscreen = document.getElementById("mobileFullscreen");
 const player = document.getElementById("player");
 const body = document.body;
 const initialStreamHeaders = ${JSON.stringify(streamHeaders)};
@@ -789,126 +522,30 @@ const streamVariants = ${JSON.stringify(streamVariants)};
 const streamLanguage = ${JSON.stringify(streamLanguage)};
 const storageKey = ${JSON.stringify(storageKey)};
 const initialStreamUrl = ${JSON.stringify(videoLink)};
-const tmdbId = ${JSON.stringify(tmdbId)};
-const currentSeason = ${JSON.stringify(seasonParam)};
-const currentEpisode = ${JSON.stringify(episodeParam)};
 
-let episodeData = null;
-let maxEpisodes = 0;
-
-// Load episode data for navigation
-async function loadEpisodeData() {
-  if (!tmdbId || !currentSeason) return;
-
-  try {
-    const response = await fetch(\`https://api.themoviedb.org/3/tv/\${tmdbId}/season/\${currentSeason}?api_key=YOUR_TMDB_API_KEY\`);
-    const data = await response.json();
-    episodeData = data.episodes;
-    maxEpisodes = data.episodes ? data.episodes.length : 0;
-    updateEpisodeNavigation();
-  } catch (error) {
-    console.debug('Failed to load episode data:', error);
-  }
+let wakeLockSentinel = null;
+async function requestWakeLock(){
+try {
+if ('wakeLock' in navigator && navigator.wakeLock?.request){
+wakeLockSentinel = await navigator.wakeLock.request('screen');
+wakeLockSentinel?.addEventListener('release', () => {
+wakeLockSentinel = null;
+});
 }
-
-function updateEpisodeNavigation() {
-  if (!currentEpisode || !episodeData) return;
-
-  const currentEpisodeNum = parseInt(currentEpisode);
-  const prevBtn = document.getElementById('prevEpisodeBtn');
-  const nextBtn = document.getElementById('nextEpisodeBtn');
-
-  if (prevBtn) {
-    prevBtn.style.opacity = currentEpisodeNum > 1 ? '1' : '0.5';
-    prevBtn.style.pointerEvents = currentEpisodeNum > 1 ? 'auto' : 'none';
-  }
-
-  if (nextBtn) {
-    nextBtn.style.opacity = currentEpisodeNum < maxEpisodes ? '1' : '0.5';
-    nextBtn.style.pointerEvents = currentEpisodeNum < maxEpisodes ? 'auto' : 'none';
-  }
+} catch(_err) {
+wakeLockSentinel = null;
 }
-
-function navigateToEpisode(direction) {
-  if (!currentSeason || !currentEpisode) return;
-
-  const currentEpisodeNum = parseInt(currentEpisode);
-  let newEpisodeNum = direction === 'next' ? currentEpisodeNum + 1 : currentEpisodeNum - 1;
-
-  // Ensure we don't go out of bounds
-  if (newEpisodeNum < 1 || newEpisodeNum > maxEpisodes) return;
-
-  const url = new URL(window.location);
-  url.searchParams.set('season', currentSeason);
-  url.searchParams.set('episode', newEpisodeNum);
-  window.location.href = url.toString();
-}
-
-function showEpisodeInfo() {
-  if (!episodeData || !currentEpisode) return;
-
-  const currentEpisodeNum = parseInt(currentEpisode);
-  const episode = episodeData.find(ep => ep.episode_number === currentEpisodeNum);
-
-  if (episode) {
-    // Show episode info overlay
-    const overlay = document.createElement('div');
-    overlay.style.cssText = \`
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      background: rgba(0, 0, 0, 0.9);
-      color: white;
-      padding: 20px;
-      border-radius: 10px;
-      text-align: center;
-      max-width: 80%;
-      z-index: 100;
-    \`;
-
-    overlay.innerHTML = \`
-      <h3>Episode \${episode.episode_number}: \${episode.name}</h3>
-      <p>\${episode.overview || 'No description available'}</p>
-      <p><small>Air date: \${episode.air_date || 'Unknown'}</small></p>
-    \`;
-
-    document.body.appendChild(overlay);
-
-    setTimeout(() => {
-      overlay.remove();
-    }, 5000);
-  }
-}
-
-// Mobile episode navigation event listeners
-if (mobilePrevEpisode) {
-  mobilePrevEpisode.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    navigateToEpisode('prev');
-    showControls();
-  });
-}
-
-if (mobileNextEpisode) {
-  mobileNextEpisode.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    navigateToEpisode('next');
-    showControls();
-  });
 }
 
 async function releaseWakeLock(){
-  try {
-    if (wakeLockSentinel){
-      await wakeLockSentinel.release();
-      wakeLockSentinel = null;
-    }
-  } catch(_err) {
-    wakeLockSentinel = null;
-  }
+try {
+if (wakeLockSentinel){
+await wakeLockSentinel.release();
+wakeLockSentinel = null;
+}
+} catch(_err) {
+wakeLockSentinel = null;
+}
 }
 
 let currentStreamHeaders = initialStreamHeaders || {};
@@ -918,33 +555,33 @@ let resumeAfterPortrait = false;
 let orientationForcedPause = false;
 
 if (Array.isArray(streamVariants) && streamVariants.length){
-  let savedVariantIndex = -1;
-  try {
-    const raw = localStorage.getItem(storageKey + ':variant');
-    if (raw !== null){
-      const parsed = parseInt(raw, 10);
-      if (!Number.isNaN(parsed) && streamVariants[parsed]){
-        savedVariantIndex = parsed;
-      }
-    }
-  } catch(_e){}
+let savedVariantIndex = -1;
+try {
+const raw = localStorage.getItem(storageKey + ':variant');
+if (raw !== null){
+const parsed = parseInt(raw, 10);
+if (!Number.isNaN(parsed) && streamVariants[parsed]){
+savedVariantIndex = parsed;
+}
+}
+} catch(_e){}
 
-  if (savedVariantIndex >= 0){
-    activeStreamIndex = savedVariantIndex;
-  } else {
-    activeStreamIndex = streamVariants.findIndex(v => v && v.url === initialStreamUrl);
-    if (activeStreamIndex < 0) activeStreamIndex = 0;
-  }
+if (savedVariantIndex >= 0){
+activeStreamIndex = savedVariantIndex;
+} else {
+activeStreamIndex = streamVariants.findIndex(v => v && v.url === initialStreamUrl);
+if (activeStreamIndex < 0) activeStreamIndex = 0;
+}
 
-  const selectedVariant = streamVariants[activeStreamIndex];
-  if (selectedVariant && selectedVariant.url){
-    currentStreamUrl = selectedVariant.url;
-  }
-  if (selectedVariant && selectedVariant.headers){
-    currentStreamHeaders = selectedVariant.headers;
-  }
+const selectedVariant = streamVariants[activeStreamIndex];
+if (selectedVariant && selectedVariant.url){
+currentStreamUrl = selectedVariant.url;
+}
+if (selectedVariant && selectedVariant.headers){
+currentStreamHeaders = selectedVariant.headers;
+}
 
-  buildCustomStreamMenu();
+buildCustomStreamMenu();
 }
 
 // Ensure inline playback on mobile browsers and keep custom controls active
@@ -964,590 +601,587 @@ let controlsHideTimer = null;
 
 // Mobile landscape helper
 function isMobileCoarse(){
-  try {
-    if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches){
-      return true
-    }
-  } catch(_e){}
-  const maxTouch = Number(navigator.maxTouchPoints || navigator.msMaxTouchPoints || 0)
-  if (maxTouch > 1){
-    return true
-  }
-  const ua = (navigator.userAgent || navigator.vendor || '').toLowerCase()
-  if (/iphone|ipad|ipod|android|mobile|mobi|silk|kindle|blackberry|bb10/.test(ua)){
-    return true
-  }
-  return false
+try {
+if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches){
+return true
+}
+} catch(_e){}
+const maxTouch = Number(navigator.maxTouchPoints || navigator.msMaxTouchPoints || 0)
+if (maxTouch > 1){
+return true
+}
+const ua = (navigator.userAgent || navigator.vendor || '').toLowerCase()
+if (/iphone|ipad|ipod|android|mobile|mobi|silk|kindle|blackberry|bb10/.test(ua)){
+return true
+}
+return false
 }
 async function lockLandscapeIfPossible(){
-  if (!isMobileCoarse()) return
-  try {
-    if (screen.orientation && screen.orientation.lock){ await screen.orientation.lock('landscape') }
-  } catch(_e){}
+if (!isMobileCoarse()) return
+try {
+if (screen.orientation && screen.orientation.lock){ await screen.orientation.lock('landscape') }
+} catch(_e){}
 }
 function unlockOrientationIfPossible(){
-  try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock() } catch(_e){}
+try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock() } catch(_e){}
 }
 
 function updateOrientationUI(){
-  if (!isMobileCoarse()) return
-  const isFs = isFullscreenActive()
-  const isPortrait = window.innerHeight > window.innerWidth
-  const shouldBlock = isFs && isPortrait
-  rotateOverlay.style.display = shouldBlock ? 'flex' : 'none'
-  if (shouldBlock){
-    if (!video.paused){ video.pause() }
-  } else {
-    if (mobilePlayToggle && mobilePlayToggle.classList.contains('active') && video.paused){
-      video.play().catch(()=>{})
-    }
-  }
+if (!isMobileCoarse()) return
+const isFs = isFullscreenActive()
+const isPortrait = window.innerHeight > window.innerWidth
+const shouldBlock = isFs && isPortrait
+rotateOverlay.style.display = shouldBlock ? 'flex' : 'none'
+if (shouldBlock){
+if (!video.paused){ video.pause() }
+} else {
+if (mobilePlayToggle && mobilePlayToggle.classList.contains('active') && video.paused){
+video.play().catch(()=>{})
+}
+}
 }
 
 function renderAudioMenu(items, activeIndex){
-  audioMenu.innerHTML = '';
-  for (let i = 0; i < items.length; i++){
-    const div = document.createElement('div');
-    div.className = 'audio-item' + (i === activeIndex ? ' active' : '');
-    div.dataset.index = String(i);
-    const primary = '<strong>' + items[i].label + '</strong>';
-    const meta = items[i].meta ? '<div style="font-size:12px;color:#888;">' + items[i].meta + '</div>' : '';
-    div.innerHTML = primary + meta;
-    audioMenu.appendChild(div);
-  }
+audioMenu.innerHTML = '';
+for (let i = 0; i < items.length; i++){
+const div = document.createElement('div');
+div.className = 'audio-item' + (i === activeIndex ? ' active' : '');
+div.dataset.index = String(i);
+const primary = '<strong>' + items[i].label + '</strong>';
+const meta = items[i].meta ? '<div style="font-size:12px;color:#888;">' + items[i].meta + '</div>' : '';
+div.innerHTML = primary + meta;
+audioMenu.appendChild(div);
+}
 }
 
 function buildCustomStreamMenu(){
-  if (!Array.isArray(streamVariants) || !streamVariants.length){
-    audioMenu.innerHTML = '<div class="audio-item active">Default</div>';
-    return;
-  }
-  const items = streamVariants.map((variant) => ({
-    label: variant.language || 'Variant',
-    meta: variant.source ? ('Source: ' + variant.source) : ''
-  }));
-  let highlightIndex = activeStreamIndex;
-  if (highlightIndex < 0) highlightIndex = 0;
-  if (highlightIndex >= items.length) highlightIndex = items.length - 1;
-  renderAudioMenu(items, highlightIndex);
+if (!Array.isArray(streamVariants) || !streamVariants.length){
+audioMenu.innerHTML = '<div class="audio-item active">Default</div>';
+return;
+}
+const items = streamVariants.map((variant) => ({
+label: variant.language || 'Variant',
+meta: variant.source ? ('Source: ' + variant.source) : ''
+}));
+let highlightIndex = activeStreamIndex;
+if (highlightIndex < 0) highlightIndex = 0;
+if (highlightIndex >= items.length) highlightIndex = items.length - 1;
+renderAudioMenu(items, highlightIndex);
 }
 
 function buildAudioListFromHls(){
-  if (Array.isArray(streamVariants) && streamVariants.length){
-    buildCustomStreamMenu();
-    return;
-  }
-  const labels = [];
-  let selectedIndex = -1;
-  hls.audioTracks.forEach((track, index) => {
-    const label = (track.name || track.lang || ('Track ' + (index+1))) + (track.lang && (track.name||'') !== track.lang ? ' ('+track.lang+')' : '');
-    labels.push({ label, meta: '' });
-    if (track.default) selectedIndex = index;
-  });
-  if (selectedIndex === -1) selectedIndex = hls.audioTrack || 0;
-  renderAudioMenu(labels, selectedIndex);
+if (Array.isArray(streamVariants) && streamVariants.length){
+buildCustomStreamMenu();
+return;
+}
+const labels = [];
+let selectedIndex = -1;
+hls.audioTracks.forEach((track, index) => {
+const label = (track.name || track.lang || ('Track ' + (index+1))) + (track.lang && (track.name||'') !== track.lang ? ' ('+track.lang+')' : '');
+labels.push({ label, meta: '' });
+if (track.default) selectedIndex = index;
+});
+if (selectedIndex === -1) selectedIndex = hls.audioTrack || 0;
+renderAudioMenu(labels, selectedIndex);
 }
 
 function buildAudioListFromNative(){
-  if (Array.isArray(streamVariants) && streamVariants.length){
-    buildCustomStreamMenu();
-    return;
-  }
-  const aTracks = video.audioTracks || [];
-  const items = [];
-  let active = 0;
-  for (let i = 0; i < aTracks.length; i++){
-    const t = aTracks[i];
-    const label = (t.label || t.language || ('Track ' + (i+1))) + (t.language && (t.label||'') !== t.language ? ' ('+t.language+')' : '');
-    items.push({ label, meta: '' });
-    if (t.enabled) active = i;
-  }
-  renderAudioMenu(items, active);
+if (Array.isArray(streamVariants) && streamVariants.length){
+buildCustomStreamMenu();
+return;
+}
+const aTracks = video.audioTracks || [];
+const items = [];
+let active = 0;
+for (let i = 0; i < aTracks.length; i++){
+const t = aTracks[i];
+const label = (t.label || t.language || ('Track ' + (i+1))) + (t.language && (t.label||'') !== t.language ? ' ('+t.language+')' : '');
+items.push({ label, meta: '' });
+if (t.enabled) active = i;
+}
+renderAudioMenu(items, active);
 }
 
 function switchStreamVariant(index){
-  if (!Array.isArray(streamVariants) || !streamVariants[index]) return
-  const variant = streamVariants[index];
-  activeStreamIndex = index;
-  currentStreamUrl = variant.url || currentStreamUrl;
-  currentStreamHeaders = variant.headers || {};
-  try { localStorage.setItem(storageKey + ':variant', String(index)) } catch(_e){}
-  showSpinner();
-  const resumeAfter = !video.paused;
-  const currentTime = video.currentTime || 0;
-  if (hls){
-    hls.loadSource(currentStreamUrl || initialStreamUrl);
-    if (hls.media !== video){
-      hls.attachMedia(video);
-    }
-    const onParsed = () => {
-      video.currentTime = Math.max(0, currentTime - 0.25);
-      if (resumeAfter){
-        video.play().catch(()=>{});
-      }
-      hls.off(Hls.Events.MANIFEST_PARSED, onParsed);
-    };
-    hls.on(Hls.Events.MANIFEST_PARSED, onParsed);
-  } else {
-    const startPlayback = resumeAfter;
-    video.src = currentStreamUrl || initialStreamUrl;
-    const onLoaded = () => {
-      video.removeEventListener('loadedmetadata', onLoaded);
-      video.currentTime = Math.max(0, currentTime - 0.25);
-      if (startPlayback){ video.play().catch(()=>{}); }
-    };
-    video.addEventListener('loadedmetadata', onLoaded);
-  }
-  buildCustomStreamMenu();
-  audioMenu.classList.remove('show');
+if (!Array.isArray(streamVariants) || !streamVariants[index]) return
+const variant = streamVariants[index];
+activeStreamIndex = index;
+currentStreamUrl = variant.url || currentStreamUrl;
+currentStreamHeaders = variant.headers || {};
+try { localStorage.setItem(storageKey + ':variant', String(index)) } catch(_e){}
+showSpinner();
+const resumeAfter = !video.paused;
+const currentTime = video.currentTime || 0;
+if (hls){
+hls.loadSource(currentStreamUrl || initialStreamUrl);
+if (hls.media !== video){
+hls.attachMedia(video);
+}
+const onParsed = () => {
+video.currentTime = Math.max(0, currentTime - 0.25);
+if (resumeAfter){
+video.play().catch(()=>{});
+}
+hls.off(Hls.Events.MANIFEST_PARSED, onParsed);
+};
+hls.on(Hls.Events.MANIFEST_PARSED, onParsed);
+} else {
+const startPlayback = resumeAfter;
+video.src = currentStreamUrl || initialStreamUrl;
+const onLoaded = () => {
+video.removeEventListener('loadedmetadata', onLoaded);
+video.currentTime = Math.max(0, currentTime - 0.25);
+if (startPlayback){ video.play().catch(()=>{}); }
+};
+video.addEventListener('loadedmetadata', onLoaded);
+}
+buildCustomStreamMenu();
+audioMenu.classList.remove('show');
 }
 
 function initPlayer(){
-  if (window.Hls && Hls.isSupported()){
-    hls = new Hls({
-      enableWorker: true,
-      capLevelToPlayerSize: false,
-      lowLatencyMode: true,
-      startLevel: 0,
-      maxBufferLength: 12,
-      maxLiveSyncPlaybackRate: 1.5,
-      liveDurationInfinity: true,
-      startFragPrefetch: true,
-      backBufferLength: 30,
-      // Keep video rendition stable when switching audio by not forcing auto right after
-      xhrSetup: function(xhr){
-        xhr.withCredentials = false
-        const headers = currentStreamHeaders || {}
-        if (headers){
-          Object.keys(headers).forEach(key => {
-            const value = headers[key]
-            if (value){ xhr.setRequestHeader(key, value) }
-          })
-        }
-      }
-    })
+if (window.Hls && Hls.isSupported()){
+hls = new Hls({
+enableWorker: true,
+capLevelToPlayerSize: false,
+lowLatencyMode: true,
+startLevel: 0,
+maxBufferLength: 12,
+maxLiveSyncPlaybackRate: 1.5,
+liveDurationInfinity: true,
+startFragPrefetch: true,
+backBufferLength: 30,
+// Keep video rendition stable when switching audio by not forcing auto right after
+xhrSetup: function(xhr){
+xhr.withCredentials = false
+const headers = currentStreamHeaders || {}
+if (headers){
+Object.keys(headers).forEach(key => {
+const value = headers[key]
+if (value){ xhr.setRequestHeader(key, value) }
+})
+}
+}
+})
 hls.config.autoStartLoad = true
 showBranding()
 hls.loadSource(currentStreamUrl || initialStreamUrl)
 hls.attachMedia(video)
 
 hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      buildAudioListFromHls()
-    })
+buildAudioListFromHls()
+})
 
-    // In case tracks update after start
-    hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
-      buildAudioListFromHls()
-    })
+// In case tracks update after start
+hls.on(Hls.Events.AUDIO_TRACKS_UPDATED, () => {
+buildAudioListFromHls()
+})
 
-    // Keep the UI in sync if track is switched programmatically
-    hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_, data) => {
-      if (data && typeof data.id === 'number'){
-        buildAudioListFromHls()
-      }
-    })
+// Keep the UI in sync if track is switched programmatically
+hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (_, data) => {
+if (data && typeof data.id === 'number'){
+buildAudioListFromHls()
+}
+})
 
-    audioMenu.addEventListener('click', (e) => {
-      const item = e.target && e.target.closest ? e.target.closest('.audio-item') : null
-      if (!item) return
-      const id = parseInt(item.dataset.index, 10)
-      if (Array.isArray(streamVariants) && streamVariants.length){
-        switchStreamVariant(id)
-        return
-      }
-      const lockedLevel = hls.currentLevel
-      hls.audioTrack = id
-      if (lockedLevel !== undefined && lockedLevel !== null && lockedLevel >= 0){
-        hls.currentLevel = lockedLevel
-      }
-      buildAudioListFromHls()
-      if (!video.paused){ video.play().catch(()=>{}) }
-    })
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    // Safari / iOS: use native HLS
-    video.src = currentStreamUrl || initialStreamUrl
-    video.addEventListener('loadedmetadata', () => {
-      buildAudioListFromNative()
-    })
-    audioMenu.addEventListener('click', (e) => {
-      const item = e.target && e.target.closest ? e.target.closest('.audio-item') : null
-      if (!item) return
-      const idx = parseInt(item.dataset.index, 10)
-      if (Array.isArray(streamVariants) && streamVariants.length){
-        switchStreamVariant(idx)
-        return
-      }
-      const aTracks = video.audioTracks || []
-      for (let i = 0; i < aTracks.length; i++){
-        aTracks[i].enabled = (i === idx)
-      }
-      buildAudioListFromNative()
-      if (!video.paused){ video.play().catch(()=>{}) }
-    })
-  } else {
-    // Fallback: try setting src anyway
-    video.src = currentStreamUrl || initialStreamUrl
-  }
+audioMenu.addEventListener('click', (e) => {
+const item = e.target && e.target.closest ? e.target.closest('.audio-item') : null
+if (!item) return
+const id = parseInt(item.dataset.index, 10)
+if (Array.isArray(streamVariants) && streamVariants.length){
+switchStreamVariant(id)
+return
+}
+const lockedLevel = hls.currentLevel
+hls.audioTrack = id
+if (lockedLevel !== undefined && lockedLevel !== null && lockedLevel >= 0){
+hls.currentLevel = lockedLevel
+}
+buildAudioListFromHls()
+if (!video.paused){ video.play().catch(()=>{}) }
+})
+} else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+// Safari / iOS: use native HLS
+video.src = currentStreamUrl || initialStreamUrl
+video.addEventListener('loadedmetadata', () => {
+buildAudioListFromNative()
+})
+audioMenu.addEventListener('click', (e) => {
+const item = e.target && e.target.closest ? e.target.closest('.audio-item') : null
+if (!item) return
+const idx = parseInt(item.dataset.index, 10)
+if (Array.isArray(streamVariants) && streamVariants.length){
+switchStreamVariant(idx)
+return
+}
+const aTracks = video.audioTracks || []
+for (let i = 0; i < aTracks.length; i++){
+aTracks[i].enabled = (i === idx)
+}
+buildAudioListFromNative()
+if (!video.paused){ video.play().catch(()=>{}) }
+})
+} else {
+// Fallback: try setting src anyway
+video.src = currentStreamUrl || initialStreamUrl
+}
 }
 
 initPlayer()
 
 // Center play toggle
 function togglePlay(){
-  if(video.paused){
-    const playPromise = video.play()
-    if (playPromise && typeof playPromise.then === 'function'){
-      playPromise.catch((err)=>{
-        console.debug('Video play blocked', err)
-        showControls()
-        centerPlay.style.display='flex'
-        if (mobilePlayToggle){
-          mobilePlayToggle.textContent = '▶'
-          mobilePlayToggle.classList.remove('active')
-        }
-      })
-    }
-  } else {
-    video.pause();
-  }
+if(video.paused){
+const playPromise = video.play()
+if (playPromise && typeof playPromise.then === 'function'){
+playPromise.catch((err)=>{
+console.debug('Video play blocked', err)
+showControls()
+centerPlay.style.display='flex'
+if (mobilePlayToggle){
+mobilePlayToggle.textContent = '▶'
+mobilePlayToggle.classList.remove('active')
+}
+})
+}
+} else {
+video.pause();
+}
 }
 centerPlay.addEventListener("click", togglePlay)
 video.addEventListener("click", togglePlay)
 video.addEventListener("play", ()=>{
-  centerPlay.style.display='none'
-  if (mobilePlayToggle){
-    mobilePlayToggle.textContent = '⏸'
-    mobilePlayToggle.classList.add('active')
-  }
-  requestWakeLock().catch(()=>{})
+centerPlay.style.display='none'
+if (mobilePlayToggle){
+mobilePlayToggle.textContent = '⏸'
+mobilePlayToggle.classList.add('active')
+}
+requestWakeLock().catch(()=>{})
 })
 video.addEventListener("pause", ()=>{
-  centerPlay.style.display='flex'
-  if (mobilePlayToggle){
-    mobilePlayToggle.textContent = '▶'
-    mobilePlayToggle.classList.remove('active')
-  }
-  releaseWakeLock().catch(()=>{})
+centerPlay.style.display='flex'
+if (mobilePlayToggle){
+mobilePlayToggle.textContent = '▶'
+mobilePlayToggle.classList.remove('active')
+}
+releaseWakeLock().catch(()=>{})
 })
 // Attempt to lock to landscape on mobile when playback starts
 video.addEventListener('play', ()=>{ lockLandscapeIfPossible(); ensureMobileLandscape() })
 
 if (mobilePlayToggle){
-  const mobilePlayHandler = (e)=>{
-    e.preventDefault()
-    e.stopPropagation()
-    togglePlay()
-    showControls()
-  }
-  mobilePlayToggle.addEventListener('click', mobilePlayHandler, { passive: false })
+const mobilePlayHandler = (e)=>{
+e.preventDefault()
+e.stopPropagation()
+togglePlay()
+showControls()
+}
+mobilePlayToggle.addEventListener('click', mobilePlayHandler, { passive: false })
 }
 
 // Time/seek bar
 function fmtTime(t){ if(!isFinite(t)) return '00:00'; const h=Math.floor(t/3600); const m=Math.floor((t%3600)/60); const s=Math.floor(t%60); return (h>0?(h+':'):'')+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0') }
 function updateTime(){
-  const percent = video.duration ? (video.currentTime / video.duration) * 100 : 0
-  seekProgress.style.width = (percent)+"%"
-  timeLabel.textContent = fmtTime(video.currentTime) + ' / ' + fmtTime(video.duration)
+const percent = video.duration ? (video.currentTime / video.duration) * 100 : 0
+seekProgress.style.width = (percent)+"%"
+timeLabel.textContent = fmtTime(video.currentTime) + ' / ' + fmtTime(video.duration)
 }
 video.addEventListener('timeupdate', updateTime)
 video.addEventListener('loadedmetadata', updateTime)
 video.addEventListener('loadedmetadata', ()=>{
-  setTimeout(()=>{
-    const autoplayAttempt = video.play()
-    if (autoplayAttempt && typeof autoplayAttempt.then === 'function'){
-      autoplayAttempt.then(()=>{
-        showControls()
-        requestWakeLock().catch(()=>{})
-      }).catch((err)=>{
-        console.debug('Autoplay failed', err)
-        showControls()
-      })
-    }
-  }, 150)
+setTimeout(()=>{
+const autoplayAttempt = video.play()
+if (autoplayAttempt && typeof autoplayAttempt.then === 'function'){
+autoplayAttempt.then(()=>{
+showControls()
+requestWakeLock().catch(()=>{})
+}).catch((err)=>{
+console.debug('Autoplay failed', err)
+showControls()
+})
+}
+}, 150)
 })
 seekContainer.addEventListener('click', (e)=>{
-  const rect = seekContainer.getBoundingClientRect()
-  const clickPos = (e.clientX - rect.left)/rect.width
-  video.currentTime = clickPos * video.duration
+const rect = seekContainer.getBoundingClientRect()
+const clickPos = (e.clientX - rect.left)/rect.width
+video.currentTime = clickPos * video.duration
 })
 // Touch drag seek
 let seekingTouch = false
 let lastTouchX = 0
 seekContainer.addEventListener('touchstart', (e)=>{ if(!e.touches||!e.touches[0]) return; seekingTouch=true; lastTouchX=e.touches[0].clientX })
 seekContainer.addEventListener('touchmove', (e)=>{
-  if(!seekingTouch) return; if(!e.touches||!e.touches[0]) return
-  const rect = seekContainer.getBoundingClientRect()
-  const x = e.touches[0].clientX
-  const pos = Math.max(0, Math.min(1, (x - rect.left)/rect.width))
-  video.currentTime = pos * video.duration
+if(!seekingTouch) return; if(!e.touches||!e.touches[0]) return
+const rect = seekContainer.getBoundingClientRect()
+const x = e.touches[0].clientX
+const pos = Math.max(0, Math.min(1, (x - rect.left)/rect.width))
+video.currentTime = pos * video.duration
 })
 seekContainer.addEventListener('touchend', ()=>{ seekingTouch=false })
 
 // Volume/mute
 function syncMuteIcons(){
-  const icon = (video.muted ? '🔇' : '🔊')
-  muteBtn.textContent = icon
-  if (mobileMute){ mobileMute.textContent = icon }
+const icon = (video.muted ? '🔇' : '🔊')
+muteBtn.textContent = icon
+if (mobileMute){ mobileMute.textContent = icon }
 }
 volume.addEventListener('input', ()=>{
-  video.volume = parseFloat(volume.value);
-  video.muted = (video.volume===0);
-  if (video.volume > 0 && video.muted){ video.muted = false }
-  syncMuteIcons()
+video.volume = parseFloat(volume.value);
+video.muted = (video.volume===0);
+if (video.volume > 0 && video.muted){ video.muted = false }
+syncMuteIcons()
 })
 muteBtn.addEventListener('click', ()=>{
-  video.muted = !video.muted;
-  if (!video.muted && video.volume===0){ video.volume=0.5; volume.value='0.5' }
-  syncMuteIcons()
+video.muted = !video.muted;
+if (!video.muted && video.volume===0){ video.volume=0.5; volume.value='0.5' }
+syncMuteIcons()
 })
 if (mobileMute){
-  mobileMute.addEventListener('click', ()=>{
-    video.muted = !video.muted;
-    if (!video.muted && video.volume===0){ video.volume=0.5; volume.value='0.5' }
-    syncMuteIcons()
-  })
+mobileMute.addEventListener('click', ()=>{
+video.muted = !video.muted;
+if (!video.muted && video.volume===0){ video.volume=0.5; volume.value='0.5' }
+syncMuteIcons()
+})
 }
 
 if (mobileAudio){
-  mobileAudio.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    audioMenu.classList.toggle('show');
-    qualityMenu.classList.remove('show');
-    speedMenu.classList.remove('show');
-    showControls();
-  })
+mobileAudio.addEventListener('click', (e)=>{
+e.stopPropagation();
+audioMenu.classList.toggle('show');
+qualityMenu.classList.remove('show');
+speedMenu.classList.remove('show');
+showControls();
+})
 }
 if (mobileQuality){
-  mobileQuality.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    buildQualityMenu();
-    qualityMenu.classList.toggle('show');
-    audioMenu.classList.remove('show');
-    speedMenu.classList.remove('show');
-    showControls();
-  })
+mobileQuality.addEventListener('click', (e)=>{
+e.stopPropagation();
+buildQualityMenu();
+qualityMenu.classList.toggle('show');
+audioMenu.classList.remove('show');
+speedMenu.classList.remove('show');
+showControls();
+})
 }
 if (mobileSpeed){
-  mobileSpeed.addEventListener('click', (e)=>{
-    e.stopPropagation();
-    buildSpeedMenu();
-    speedMenu.classList.toggle('show');
-    audioMenu.classList.remove('show');
-    qualityMenu.classList.remove('show');
-    showControls();
-  })
+mobileSpeed.addEventListener('click', (e)=>{
+e.stopPropagation();
+buildSpeedMenu();
+speedMenu.classList.toggle('show');
+audioMenu.classList.remove('show');
+qualityMenu.classList.remove('show');
+showControls();
+})
 }
 if (mobileFullscreen){ mobileFullscreen.addEventListener('click', toggleFullscreen) }
 
 
 // Fullscreen
 function requestFullscreenElement(el){
-  if (!el) return Promise.reject(new Error('No element to fullscreen'))
-  if (el.requestFullscreen) return el.requestFullscreen()
-  if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen()
-  if (el.msRequestFullscreen) return el.msRequestFullscreen()
-  return Promise.reject(new Error('Fullscreen API not available'))
+if (!el) return Promise.reject(new Error('No element to fullscreen'))
+if (el.requestFullscreen) return el.requestFullscreen()
+if (el.webkitRequestFullscreen) return el.webkitRequestFullscreen()
+if (el.msRequestFullscreen) return el.msRequestFullscreen()
+return Promise.reject(new Error('Fullscreen API not available'))
 }
 
 function exitFullscreen(){
-  if (document.exitFullscreen) return document.exitFullscreen()
-  if (document.webkitExitFullscreen) return document.webkitExitFullscreen()
-  if (document.msExitFullscreen) return document.msExitFullscreen()
-  return Promise.resolve()
+if (document.exitFullscreen) return document.exitFullscreen()
+if (document.webkitExitFullscreen) return document.webkitExitFullscreen()
+if (document.msExitFullscreen) return document.msExitFullscreen()
+return Promise.resolve()
 }
 
 function enterMobilePseudoFullscreen(){
-  player.classList.add('mobile-fullscreen')
-  body.classList.add('mobile-fs-lock')
-  video.controls = false
-  lockLandscapeIfPossible()
-  showControls()
-  updateOrientationUI()
+player.classList.add('mobile-fullscreen')
+body.classList.add('mobile-fs-lock')
+video.controls = false
+lockLandscapeIfPossible()
+showControls()
+updateOrientationUI()
 }
 
 function exitMobilePseudoFullscreen(){
-  player.classList.remove('mobile-fullscreen')
-  body.classList.remove('mobile-fs-lock')
-  unlockOrientationIfPossible()
-  showControls()
-  updateOrientationUI()
+player.classList.remove('mobile-fullscreen')
+body.classList.remove('mobile-fs-lock')
+unlockOrientationIfPossible()
+showControls()
+updateOrientationUI()
 }
 
 function ensureMobileLandscape(){
-  if (!isMobileCoarse()) return
-  const nativeFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement
-  if (nativeFs) return
-  if (!player.classList.contains('mobile-fullscreen')){
-    enterMobilePseudoFullscreen()
-  }
+if (!isMobileCoarse()) return
+const nativeFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement
+if (nativeFs) return
+if (!player.classList.contains('mobile-fullscreen')){
+enterMobilePseudoFullscreen()
+}
 }
 
 async function toggleFullscreen(){
-  if (isMobileCoarse()){
-    const nativeFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement
-    const pseudoFs = player.classList.contains('mobile-fullscreen')
-    if (!nativeFs && !pseudoFs){
-      let nativeSucceeded = false
-      try {
-        await requestFullscreenElement(player)
-        nativeSucceeded = true
-      } catch(_err){
-        try {
-          await requestFullscreenElement(video)
-          nativeSucceeded = true
-        } catch(_err2){}
-      }
-      if (nativeSucceeded){
-        lockLandscapeIfPossible()
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      } else {
-        enterMobilePseudoFullscreen()
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-        showControls()
-      }
-      updateOrientationUI()
-    } else {
-      await exitFullscreen().catch(()=>{})
-      exitMobilePseudoFullscreen()
-    }
-    return
-  }
+if (isMobileCoarse()){
+const nativeFs = document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement
+const pseudoFs = player.classList.contains('mobile-fullscreen')
+if (!nativeFs && !pseudoFs){
+let nativeSucceeded = false
+try {
+await requestFullscreenElement(player)
+nativeSucceeded = true
+} catch(_err){
+try {
+await requestFullscreenElement(video)
+nativeSucceeded = true
+} catch(_err2){}
+}
+if (nativeSucceeded){
+lockLandscapeIfPossible()
+window.scrollTo({ top: 0, behavior: 'smooth' })
+} else {
+enterMobilePseudoFullscreen()
+window.scrollTo({ top: 0, behavior: 'smooth' })
+showControls()
+}
+updateOrientationUI()
+} else {
+await exitFullscreen().catch(()=>{})
+exitMobilePseudoFullscreen()
+}
+return
+}
 
-  if (!isFullscreenActive()){
-    try {
-      await requestFullscreenElement(player)
-    } catch (_err){
-      await requestFullscreenElement(video).catch(()=>{})
-    }
-  } else {
-    await exitFullscreen()
-  }
+if (!isFullscreenActive()){
+try {
+await requestFullscreenElement(player)
+} catch (_err){
+await requestFullscreenElement(video).catch(()=>{})
+}
+} else {
+await exitFullscreen()
+}
 }
 fullscreenBtn.addEventListener("click", toggleFullscreen)
 
 function onFullscreenChange(){
-  showControls()
-  if (isFullscreenActive()){
-    lockLandscapeIfPossible()
-    window.scrollTo({ top: 0, behavior: 'smooth' })
-  } else {
-    unlockOrientationIfPossible()
-    exitMobilePseudoFullscreen()
-  }
-  video.controls = false
-  updateOrientationUI()
+showControls()
+if (isFullscreenActive()){
+lockLandscapeIfPossible()
+window.scrollTo({ top: 0, behavior: 'smooth' })
+} else {
+unlockOrientationIfPossible()
+exitMobilePseudoFullscreen()
+}
+video.controls = false
+updateOrientationUI()
 }
 
 document.addEventListener('fullscreenchange', onFullscreenChange)
 document.addEventListener('webkitfullscreenchange', onFullscreenChange)
 document.addEventListener('msfullscreenchange', onFullscreenChange)
 video.addEventListener('webkitendfullscreen', ()=>{
-  video.controls = false
-  exitMobilePseudoFullscreen()
+video.controls = false
+exitMobilePseudoFullscreen()
 })
 window.addEventListener('orientationchange', updateOrientationUI)
 window.addEventListener('resize', updateOrientationUI)
 
 // Audio menu toggle
 audioBtn.addEventListener('click', (e)=>{
-  e.stopPropagation()
-  audioMenu.classList.toggle('show')
-  showControls()
+e.stopPropagation()
+audioMenu.classList.toggle('show')
+showControls()
 })
 document.addEventListener('click', ()=>{ audioMenu.classList.remove('show'); qualityMenu.classList.remove('show'); speedMenu.classList.remove('show') })
 
 // Quality menu
 function buildQualityMenu(){
-  qualityMenu.innerHTML = ''
-  if (hls && hls.levels && hls.levels.length){
-    const auto = document.createElement('div'); auto.className='menu-item'; auto.textContent='Auto'; auto.dataset.level='-1'; qualityMenu.appendChild(auto)
-    hls.levels.forEach((lvl, i)=>{
-      const label = (lvl.height? (lvl.height+'p') : (Math.round((lvl.bitrate||0)/1000)+'kbps'))
-      const el = document.createElement('div'); el.className='menu-item'; el.textContent=label; el.dataset.level=String(i); qualityMenu.appendChild(el)
-    })
-    const active = hls.currentLevel
-    Array.from(qualityMenu.children).forEach((c)=>{ if (parseInt(c.dataset.level)===active) c.classList.add('active'); if(active===-1 && c.dataset.level==='-1') c.classList.add('active') })
-  } else {
-    const only = document.createElement('div'); only.className='menu-item active'; only.textContent='Auto'; qualityMenu.appendChild(only)
-  }
+qualityMenu.innerHTML = ''
+if (hls && hls.levels && hls.levels.length){
+const auto = document.createElement('div'); auto.className='menu-item'; auto.textContent='Auto'; auto.dataset.level='-1'; qualityMenu.appendChild(auto)
+hls.levels.forEach((lvl, i)=>{
+const label = (lvl.height? (lvl.height+'p') : (Math.round((lvl.bitrate||0)/1000)+'kbps'))
+const el = document.createElement('div'); el.className='menu-item'; el.textContent=label; el.dataset.level=String(i); qualityMenu.appendChild(el)
+})
+const active = hls.currentLevel
+Array.from(qualityMenu.children).forEach((c)=>{ if (parseInt(c.dataset.level)===active) c.classList.add('active'); if(active===-1 && c.dataset.level==='-1') c.classList.add('active') })
+} else {
+const only = document.createElement('div'); only.className='menu-item active'; only.textContent='Auto'; qualityMenu.appendChild(only)
+}
 }
 qualityBtn.addEventListener('click', (e)=>{ e.stopPropagation(); buildQualityMenu(); qualityMenu.classList.toggle('show'); speedMenu.classList.remove('show'); audioMenu.classList.remove('show'); showControls() })
 qualityMenu.addEventListener('click', (e)=>{
-  const t = e.target; if(!t || !t.classList || !t.classList.contains('menu-item')) return
-  const level = parseInt(t.dataset.level)
-  if (hls){ hls.currentLevel = level }
-  buildQualityMenu()
+const t = e.target; if(!t || !t.classList || !t.classList.contains('menu-item')) return
+const level = parseInt(t.dataset.level)
+if (hls){ hls.currentLevel = level }
+buildQualityMenu()
 })
 
 // Speed menu
 const speeds = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2]
 function buildSpeedMenu(){
-  speedMenu.innerHTML=''
-  const current = video.playbackRate
-  for (let i=0;i<speeds.length;i++){
-    const s = speeds[i]
-    const el = document.createElement('div'); el.className='menu-item'+(Math.abs(s-current)<0.001?' active':''); el.textContent = (s+'x'); el.dataset.speed=String(s); speedMenu.appendChild(el)
-  }
+speedMenu.innerHTML=''
+const current = video.playbackRate
+for (let i=0;i<speeds.length;i++){
+const s = speeds[i]
+const el = document.createElement('div'); el.className='menu-item'+(Math.abs(s-current)<0.001?' active':''); el.textContent = (s+'x'); el.dataset.speed=String(s); speedMenu.appendChild(el)
+}
 }
 speedBtn.addEventListener('click',(e)=>{ e.stopPropagation(); buildSpeedMenu(); speedMenu.classList.toggle('show'); qualityMenu.classList.remove('show'); audioMenu.classList.remove('show'); showControls() })
 speedMenu.addEventListener('click',(e)=>{ const t=e.target; if(!t||!t.classList||!t.classList.contains('menu-item')) return; const s=parseFloat(t.dataset.speed); video.playbackRate=s; localStorage.setItem(storageKey+':speed', String(s)); buildSpeedMenu() })
 
 // PiP
 pipBtn.addEventListener('click', async ()=>{
-  try {
-    if (document.pictureInPictureElement){ await document.exitPictureInPicture() } else if (video.requestPictureInPicture){ await video.requestPictureInPicture() }
-  } catch(_e){}
+try {
+if (document.pictureInPictureElement){ await document.exitPictureInPicture() } else if (video.requestPictureInPicture){ await video.requestPictureInPicture() }
+} catch(_e){}
 })
 
 // Auto-hide controls like Netflix
 function isFullscreenActive(){
-  return Boolean(document.fullscreenElement || document.webkitFullscreenElement || player.classList.contains('mobile-fullscreen'))
+return Boolean(document.fullscreenElement || document.webkitFullscreenElement || player.classList.contains('mobile-fullscreen'))
 }
 
 function showControls(){
-  player.classList.add('show-controls')
-  player.classList.remove('hide-cursor')
-  if (controlsHideTimer){
-    clearTimeout(controlsHideTimer)
-    controlsHideTimer = null
-  }
-  const autoHideDelay = 3000
-  controlsHideTimer = setTimeout(() => {
-    // keep controls visible if audio menu is open or when fullscreen toggles mid-timeout
-    if (audioMenu.classList.contains('show') || video.paused){
-      player.classList.add('show-controls')
-      player.classList.remove('hide-cursor')
-      return
-    }
-    player.classList.remove('show-controls')
-    player.classList.add('hide-cursor')
-  }, autoHideDelay)
+player.classList.add('show-controls')
+player.classList.remove('hide-cursor')
+if (controlsHideTimer){
+clearTimeout(controlsHideTimer)
+controlsHideTimer = null
+}
+const autoHideDelay = 3000
+controlsHideTimer = setTimeout(() => {
+// keep controls visible if audio menu is open or when fullscreen toggles mid-timeout
+if (audioMenu.classList.contains('show') || video.paused){
+player.classList.add('show-controls')
+player.classList.remove('hide-cursor')
+return
+}
+player.classList.remove('show-controls')
+player.classList.add('hide-cursor')
+}, autoHideDelay)
 }
 
 ;['mousemove','pointermove','touchstart','touchmove'].forEach(evt => {
-  player.addEventListener(evt, () => {
-    showControls()
-  }, { passive: true })
+player.addEventListener(evt, () => {
+showControls()
+}, { passive: true })
 })
 document.addEventListener('keydown', (e)=>{
-  if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return
-  showControls()
-  if (e.code === 'Space'){ e.preventDefault(); togglePlay() }
-  if (e.key === 'ArrowLeft'){ video.currentTime=Math.max(0,video.currentTime-10) }
-  if (e.key === 'ArrowRight'){ video.currentTime=Math.min(video.duration,video.currentTime+10) }
-  if (e.key === 'ArrowUp' && currentSeason && currentEpisode){ navigateToEpisode('prev') }
-  if (e.key === 'ArrowDown' && currentSeason && currentEpisode){ navigateToEpisode('next') }
-  if (e.key === 'f' || e.key === 'F'){ toggleFullscreen() }
-  if (e.key === 'm' || e.key === 'M'){ video.muted=!video.muted; muteBtn.textContent = (video.muted?'🔇':'🔊') }
-  if (e.key === 'i' || e.key === 'I'){ showEpisodeInfo() }
+if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA')) return
+showControls()
+if (e.code === 'Space'){ e.preventDefault(); togglePlay() }
+if (e.key === 'ArrowLeft'){ video.currentTime=Math.max(0,video.currentTime-10) }
+if (e.key === 'ArrowRight'){ video.currentTime=Math.min(video.duration,video.currentTime+10) }
+if (e.key === 'f' || e.key === 'F'){ toggleFullscreen() }
+if (e.key === 'm' || e.key === 'M'){ video.muted=!video.muted; muteBtn.textContent = (video.muted?'🔇':'🔊') }
 })
 
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && !video.paused){
-    requestWakeLock().catch(()=>{})
-  } else {
-    releaseWakeLock().catch(()=>{})
-  }
+if (document.visibilityState === 'visible' && !video.paused){
+requestWakeLock().catch(()=>{})
+} else {
+releaseWakeLock().catch(()=>{})
+}
 })
 
 // Spinner & buffering
@@ -1566,11 +1200,11 @@ video.addEventListener('waiting', showBranding)
 // Gestures: double-tap seek, dblclick fullscreen
 function dblSeek(dir){ video.currentTime = Math.max(0, Math.min(video.duration||Infinity, video.currentTime + (dir*10))) }
 function showSeekBadge(dir){
-  const el = dir < 0 ? seekBadgeLeft : seekBadgeRight
-  if (!el) return
-  el.classList.remove('show')
-  void el.offsetWidth
-  el.classList.add('show')
+const el = dir < 0 ? seekBadgeLeft : seekBadgeRight
+if (!el) return
+el.classList.remove('show')
+void el.offsetWidth
+el.classList.add('show')
 }
 zoneLeft.addEventListener('dblclick', ()=>{ dblSeek(-1); showSeekBadge(-1) })
 zoneRight.addEventListener('dblclick', ()=>{ dblSeek(1); showSeekBadge(1) })
@@ -1579,14 +1213,14 @@ zoneRight.addEventListener('dblclick', ()=>{ dblSeek(1); showSeekBadge(1) })
 let lastTapLeft = 0
 let lastTapRight = 0
 function handleZoneTap(side){
-  const now = Date.now()
-  if (side === 'left'){
-    if (now - lastTapLeft < 300){ dblSeek(-1); showSeekBadge(-1) }
-    lastTapLeft = now
-  } else {
-    if (now - lastTapRight < 300){ dblSeek(1); showSeekBadge(1) }
-    lastTapRight = now
-  }
+const now = Date.now()
+if (side === 'left'){
+if (now - lastTapLeft < 300){ dblSeek(-1); showSeekBadge(-1) }
+lastTapLeft = now
+} else {
+if (now - lastTapRight < 300){ dblSeek(1); showSeekBadge(1) }
+lastTapRight = now
+}
 }
 zoneLeft.addEventListener('touchstart', ()=> handleZoneTap('left'))
 zoneRight.addEventListener('touchstart', ()=> handleZoneTap('right'))
@@ -1599,7 +1233,7 @@ const savedSpd = parseFloat(localStorage.getItem(storageKey+':speed')||'1')
 if (!isNaN(savedSpd)){ video.playbackRate = savedSpd }
 const savedPos = parseFloat(localStorage.getItem(storageKey+':time')||'NaN')
 if (!isNaN(savedPos)){
-  video.addEventListener('loadedmetadata', ()=>{ if (savedPos>0 && savedPos < (video.duration||Infinity)-2){ video.currentTime = savedPos } })
+video.addEventListener('loadedmetadata', ()=>{ if (savedPos>0 && savedPos < (video.duration||Infinity)-2){ video.currentTime = savedPos } })
 }
 setInterval(()=>{ if(!video.seeking && isFinite(video.currentTime)){ localStorage.setItem(storageKey+':time', String(video.currentTime)) } }, 3000)
 volume.addEventListener('change', ()=>{ localStorage.setItem(storageKey+':volume', String(video.volume)) })
@@ -1607,8 +1241,8 @@ volume.addEventListener('change', ()=>{ localStorage.setItem(storageKey+':volume
 </body>
 </html>
 `
-    return new Response(html, { headers: { "Content-Type": "text/html" } })
-  } catch(err){
-    return new Response(err.toString(), { status: 500 })
-  }
+return new Response(html, { headers: { "Content-Type": "text/html" } })
+} catch(err){
+return new Response(err.toString(), { status: 500 })
+}
 }
