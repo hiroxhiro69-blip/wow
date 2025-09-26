@@ -415,7 +415,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 </head>
 <body>
 <div id="player">
-  <video id="video" poster="${poster}" autoplay playsinline webkit-playsinline x5-playsinline></video>
+  <video id="video" poster="${poster}" autoplay muted playsinline webkit-playsinline x5-playsinline></video>
   <div id="overlay">${overlayTitle}</div>
   <div id="watermark">HiroXStream</div>
   <button id="centerPlay">⏯</button>
@@ -563,6 +563,8 @@ if (Array.isArray(streamVariants) && streamVariants.length){
 video.setAttribute('playsinline', 'true');
 video.setAttribute('webkit-playsinline', 'true');
 video.setAttribute('x5-playsinline', 'true');
+video.setAttribute('muted', '');
+video.muted = true;
 video.playsInline = true;
 video.controls = false;
 
@@ -682,22 +684,29 @@ function switchStreamVariant(index){
   try { localStorage.setItem(storageKey + ':variant', String(index)) } catch(_e){}
   showSpinner();
   const resumeAfter = !video.paused;
+  const currentTime = video.currentTime || 0;
   if (hls){
     hls.loadSource(currentStreamUrl || initialStreamUrl);
     if (hls.media !== video){
       hls.attachMedia(video);
     }
-    if (resumeAfter){
-      const onParsed = () => {
+    const onParsed = () => {
+      video.currentTime = Math.max(0, currentTime - 0.25);
+      if (resumeAfter){
         video.play().catch(()=>{});
-        hls.off(Hls.Events.MANIFEST_PARSED, onParsed);
-      };
-      hls.on(Hls.Events.MANIFEST_PARSED, onParsed);
-    }
+      }
+      hls.off(Hls.Events.MANIFEST_PARSED, onParsed);
+    };
+    hls.on(Hls.Events.MANIFEST_PARSED, onParsed);
   } else {
     const startPlayback = resumeAfter;
     video.src = currentStreamUrl || initialStreamUrl;
-    if (startPlayback){ video.play().catch(()=>{}); }
+    const onLoaded = () => {
+      video.removeEventListener('loadedmetadata', onLoaded);
+      video.currentTime = Math.max(0, currentTime - 0.25);
+      if (startPlayback){ video.play().catch(()=>{}); }
+    };
+    video.addEventListener('loadedmetadata', onLoaded);
   }
   buildCustomStreamMenu();
   audioMenu.classList.remove('show');
