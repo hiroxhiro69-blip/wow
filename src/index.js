@@ -300,6 +300,14 @@ self.addEventListener('fetch', (event) => {
       }
     }
 
+    let overlayTitle = title
+    if (contentType === "series") {
+      const seasonLabel = typeof seasonParam === "string" && seasonParam ? `S${seasonParam}` : ""
+      const episodeLabel = typeof episodeParam === "string" && episodeParam ? `E${episodeParam}` : ""
+      const meta = [seasonLabel, episodeLabel].filter(Boolean).join(" · ")
+      overlayTitle = [title, meta].filter(Boolean).join(" • ")
+    }
+
     if (!poster) {
       poster = ""
     }
@@ -332,14 +340,19 @@ html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-s
 #player.mobile-fullscreen video { object-fit:contain; }
 body.mobile-fs-lock { overflow:hidden; touch-action:none; }
 video { width:100%; height:100%; object-fit:cover; background:#000; }
-#overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; pointer-events:none; }
+#overlay { position:absolute; top:20px; left:20px; color:#fff; font-size:20px; font-weight:bold; text-shadow:2px 2px 5px #000; pointer-events:none; opacity:0; transition:opacity .25s ease; }
+#player.show-controls #overlay { opacity:1; }
+#player.hide-cursor #overlay { opacity:0; }
 #watermark { position:absolute; top:20px; right:20px; padding:6px 12px; font-size:14px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,0.85); background:rgba(0,0,0,0.45); border-radius:6px; pointer-events:none; backdrop-filter:blur(4px); }
 #centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:64px; color:rgba(255,255,255,0.85); display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; }
 
 /* Netflix-like controls */
 #controls { position:absolute; left:0; right:0; bottom:0; padding:16px 16px calc(20px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(0,0,0,0.7), rgba(0,0,0,0)); opacity:0; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease; }
 #player.show-controls #controls { opacity:1; transform:translateY(0); }
+#player.show-controls .next-episode { opacity:1; transform:translateY(0); }
 #player.hide-cursor { cursor:none; }
+.next-episode { opacity:0; transform:translateY(10px); }
+#player.hide-cursor .next-episode { opacity:0; }
 .row { display:flex; align-items:center; gap:10px; color:#fff; }
 .btn { background:rgba(255,255,255,0.08); border:none; color:white; cursor:pointer; font-size:18px; padding:8px 12px; border-radius:10px; transition:background .2s ease; }
 .btn:hover { background:rgba(255,255,255,0.1); }
@@ -372,10 +385,10 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #spinner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:48px; height:48px; border:4px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; display:none; }
 @keyframes spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
 
-.next-episode { position:absolute; bottom:20px; right:20px; background:rgba(229,9,20,0.92); color:#fff; border:none; padding:10px 18px; border-radius:999px; font-size:14px; font-weight:600; cursor:pointer; z-index:1000; box-shadow:0 6px 16px rgba(229,9,20,0.35); transition:background 0.2s ease; }
+.next-episode { position:absolute; bottom:100px; right:24px; background:rgba(229,9,20,0.92); color:#fff; border:none; padding:10px 18px; border-radius:999px; font-size:14px; font-weight:600; cursor:pointer; z-index:1000; box-shadow:0 6px 16px rgba(229,9,20,0.35); transition:background 0.2s ease, opacity .25s ease, transform .25s ease; opacity:0; transform:translateY(10px); }
 .next-episode:hover { background:rgba(229,9,20,1); }
 
-.next-episode.mobile { bottom:calc(24px + env(safe-area-inset-bottom)); right:16px; }
+.next-episode.mobile { bottom:calc(108px + env(safe-area-inset-bottom)); right:16px; }
 
 /* Gesture zones */
 #zoneLeft, #zoneRight { position:absolute; top:0; bottom:0; width:35%; cursor:pointer; }
@@ -428,7 +441,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 <body>
 <div id="player">
   <video id="video" poster="${poster}" autoplay playsinline webkit-playsinline x5-playsinline></video>
-  <div id="overlay">${title}</div>
+  <div id="overlay">${overlayTitle}</div>
   <div id="watermark">HiroXStream</div>
   <button id="centerPlay">⏯</button>
   <div id="spinner"></div>
