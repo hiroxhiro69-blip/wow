@@ -283,36 +283,6 @@ self.addEventListener('fetch', (event) => {
       return buildVidlinkFallbackResponse()
     }
 
-    let nextEpisodeHref = ""
-    if (contentType === "series") {
-      const computeNextEpisodeValue = (raw) => {
-        if (typeof raw !== "string") return null
-        const trimmed = raw.trim()
-        if (!trimmed) return null
-        if (/^\d+$/.test(trimmed)) {
-          const width = trimmed.length
-          const incremented = (parseInt(trimmed, 10) + 1).toString()
-          return incremented.padStart(width, "0")
-        }
-        const numeric = Number(trimmed)
-        if (Number.isFinite(numeric)) {
-          return String(numeric + 1)
-        }
-        return null
-      }
-
-      const nextEpisodeValue = computeNextEpisodeValue(episodeParam)
-      if (nextEpisodeValue !== null) {
-        const nextEpisodeParams = new URLSearchParams()
-        nextEpisodeParams.set("tmdb", tmdbId)
-        if (typeof seasonParam === "string" && seasonParam.trim() !== "") {
-          nextEpisodeParams.set("season", seasonParam.trim())
-        }
-        nextEpisodeParams.set("episode", nextEpisodeValue)
-        nextEpisodeHref = `?${nextEpisodeParams.toString()}`
-      }
-    }
-
     let overlayTitle = title
     if (contentType === "series") {
       const seasonLabel = typeof seasonParam === "string" && seasonParam ? `S${seasonParam}` : ""
@@ -362,10 +332,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 /* Netflix-like controls */
 #controls { position:absolute; left:0; right:0; bottom:0; padding:16px 16px calc(20px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(0,0,0,0.7), rgba(0,0,0,0)); opacity:0; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease; }
 #player.show-controls #controls { opacity:1; transform:translateY(0); }
-#player.show-controls .next-episode { opacity:1; transform:translateY(0); }
 #player.hide-cursor { cursor:none; }
-.next-episode { opacity:0; transform:translateY(10px); }
-#player.hide-cursor .next-episode { opacity:0; }
 .row { display:flex; align-items:center; gap:10px; color:#fff; }
 .btn { background:rgba(255,255,255,0.08); border:none; color:white; cursor:pointer; font-size:18px; padding:8px 12px; border-radius:10px; transition:background .2s ease; }
 .btn:hover { background:rgba(255,255,255,0.1); }
@@ -397,11 +364,6 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 /* Spinner */
 #spinner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:48px; height:48px; border:4px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; display:none; }
 @keyframes spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
-
-.next-episode { position:absolute; bottom:100px; right:24px; background:rgba(229,9,20,0.92); color:#fff; border:none; padding:10px 18px; border-radius:999px; font-size:14px; font-weight:600; cursor:pointer; z-index:1000; box-shadow:0 6px 16px rgba(229,9,20,0.35); transition:background 0.2s ease, opacity .25s ease, transform .25s ease; opacity:0; transform:translateY(10px); }
-.next-episode:hover { background:rgba(229,9,20,1); }
-
-.next-episode.mobile { bottom:calc(108px + env(safe-area-inset-bottom)); right:16px; }
 
 /* Gesture zones */
 #zoneLeft, #zoneRight { position:absolute; top:0; bottom:0; width:35%; cursor:pointer; }
@@ -458,7 +420,6 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
   <div id="watermark">HiroXStream</div>
   <button id="centerPlay">⏯</button>
   <div id="spinner"></div>
-  ${nextEpisodeHref ? `<button id="nextEpisodeBtn" class="next-episode">Next Episode ▶</button>` : ""}
   <div id="zoneLeft"></div>
   <div id="zoneRight"></div>
   <div id="seekBadgeLeft" class="seek-badge left">
@@ -536,11 +497,6 @@ const streamVariants = ${JSON.stringify(streamVariants)};
 const streamLanguage = ${JSON.stringify(streamLanguage)};
 const storageKey = ${JSON.stringify(storageKey)};
 const initialStreamUrl = ${JSON.stringify(videoLink)};
-const nextEpisodeLink = ${JSON.stringify(nextEpisodeHref)};
-const initialSeasonParam = ${JSON.stringify(seasonParam || "")};
-const initialEpisodeParam = ${JSON.stringify(episodeParam || "")};
-const tmdbParam = ${JSON.stringify(tmdbId || "")};
-const nextEpisodeBtn = document.getElementById("nextEpisodeBtn");
 
 let wakeLockSentinel = null;
 async function requestWakeLock(){
@@ -565,22 +521,6 @@ async function releaseWakeLock(){
   } catch(_err) {
     wakeLockSentinel = null;
   }
-}
-
-function computeNextEpisodeValue(raw){
-  if (typeof raw !== 'string') return null;
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  if (/^\d+$/.test(trimmed)){
-    const width = trimmed.length;
-    const incremented = (parseInt(trimmed, 10) + 1).toString();
-    return incremented.padStart(width, '0');
-  }
-  const numeric = Number(trimmed);
-  if (Number.isFinite(numeric)){
-    return String(numeric + 1);
-  }
-  return null;
 }
 
 let currentStreamHeaders = initialStreamHeaders || {};
@@ -815,35 +755,8 @@ hls.on(Hls.Events.MANIFEST_PARSED, () => {
       hls.audioTrack = id
       if (lockedLevel !== undefined && lockedLevel !== null && lockedLevel >= 0){
         hls.currentLevel = lockedLevel
-      }
-      buildAudioListFromHls()
-      if (video.paused === false){ video.play().catch(()=>{}) }
-    })
-  } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-    // Safari / iOS: use native HLS
-    video.src = currentStreamUrl || initialStreamUrl
-    video.addEventListener('loadedmetadata', () => {
-      buildAudioListFromNative()
-    })
-    audioMenu.addEventListener('click', (e) => {
-      const item = e.target && e.target.closest ? e.target.closest('.audio-item') : null
-      if (!item) return
-      const idx = parseInt(item.dataset.index, 10)
-      if (Array.isArray(streamVariants) && streamVariants.length){
-        switchStreamVariant(idx)
-        return
-      }
-      const aTracks = video.audioTracks || []
-      for (let i = 0; i < aTracks.length; i++){
-        aTracks[i].enabled = (i === idx)
-      }
-      buildAudioListFromNative()
-      if (video.paused === false){ video.play().catch(()=>{}) }
-    })
-  } else {
-    // Fallback: try setting src anyway
-    video.src = currentStreamUrl || initialStreamUrl
-  }
+    let currentStreamHeaders = initialStreamHeaders || {};
+
 }
 
 initPlayer()
