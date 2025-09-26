@@ -758,7 +758,6 @@ hls.attachMedia(video)
 
 hls.on(Hls.Events.MANIFEST_PARSED, () => {
       buildAudioListFromHls()
-      hideBranding()
     })
 
     // In case tracks update after start
@@ -1184,6 +1183,7 @@ video.addEventListener('playing', hideSpinner)
 video.addEventListener('canplay', hideSpinner)
 video.addEventListener('playing', hideBranding)
 video.addEventListener('canplay', hideBranding)
+video.addEventListener('waiting', showBranding)
 
 // Gestures: double-tap seek, dblclick fullscreen
 function dblSeek(dir){ video.currentTime = Math.max(0, Math.min(video.duration||Infinity, video.currentTime + (dir*10))) }
