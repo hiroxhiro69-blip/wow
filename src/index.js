@@ -186,24 +186,7 @@ self.addEventListener('fetch', (event) => {
       const episodeSegment = encodeURIComponent(episodeParam || "")
       const fallbackUrl = contentType === "series"
         ? `https://player.vidplus.to/embed/tv/${safeTmdbId}/${seasonSegment}/${episodeSegment}?autoplay=true&poster=true&title=true&watchparty=false&chromecast=true&servericon=true&setting=true&pip=true&primarycolor=6C63FF&secondarycolor=9F9BFF&iconcolor=FFFFFF&logourl=https%3A%2F%2Fi.ibb.co%2F67wTJd9R%2Fpngimg-com-netflix-PNG11.png&font=Roboto&fontcolor=FFFFFF&fontsize=20&opacity=0.5`
-        : `https:player.vidplus.to/embed/movie/${safeTmdbId}?autoplay=true&poster=true&title=true&watchparty=false&chromecast=true&servericon=true&setting=true&pip=true&primarycolor=6C63FF&secondarycolor=9F9BFF&iconcolor=FFFFFF&logourl=https%3A%2F%2Fi.ibb.co%2F67wTJd9R%2Fpngimg-com-netflix-PNG11.png&font=Roboto&fontcolor=FFFFFF&fontsize=20&opacity=0.5`
-      let nextEpisodeMarkup = ""
-      let nextEpisodeScript = ""
-
-      if (contentType === "series" && typeof episodeParam === "string") {
-        const parsedEpisode = parseInt(episodeParam, 10)
-        if (!Number.isNaN(parsedEpisode)) {
-          const nextEpisodeParams = new URLSearchParams()
-          nextEpisodeParams.set("tmdb", tmdbId)
-          if (seasonParam) {
-            nextEpisodeParams.set("season", seasonParam)
-          }
-          nextEpisodeParams.set("episode", String(parsedEpisode + 1))
-          const nextEpisodeHref = `?${nextEpisodeParams.toString()}`
-          nextEpisodeMarkup = `<button id="nextEpisodeBtn" class="next-episode">Next Episode ▶</button>`
-          nextEpisodeScript = `<script>(function(){ const btn = document.getElementById('nextEpisodeBtn'); if(!btn) return; btn.addEventListener('click', function(){ window.location.href = ${JSON.stringify(nextEpisodeHref)}; }); })();</script>`
-        }
-      }
+        : `https://player.vidplus.to/embed/movie/${safeTmdbId}?autoplay=true&poster=true&title=true&watchparty=false&chromecast=true&servericon=true&setting=true&pip=true&primarycolor=6C63FF&secondarycolor=9F9BFF&iconcolor=FFFFFF&logourl=https%3A%2F%2Fi.ibb.co%2F67wTJd9R%2Fpngimg-com-netflix-PNG11.png&font=Roboto&fontcolor=FFFFFF&fontsize=20&opacity=0.5`
 
       const html = `<!DOCTYPE html>
 <html lang="en">
@@ -230,32 +213,12 @@ self.addEventListener('fetch', (event) => {
     height: 100%;
     border: 0;
   }
-  .next-episode {
-    position: absolute;
-    bottom: 16px;
-    right: 16px;
-    background: rgba(229, 9, 20, 0.92);
-    color: #fff;
-    border: none;
-    padding: 10px 18px;
-    border-radius: 999px;
-    font-size: 14px;
-    cursor: pointer;
-    z-index: 2;
-    box-shadow: 0 6px 16px rgba(229, 9, 20, 0.35);
-    transition: background 0.2s ease;
-  }
-  .next-episode:hover {
-    background: rgba(229, 9, 20, 1);
-  }
 </style>
 </head>
 <body>
   <div id="wrapper">
     <iframe src="${fallbackUrl}" allow="autoplay; fullscreen; encrypted-media" allowfullscreen referrerpolicy="no-referrer-when-downgrade"></iframe>
-    ${nextEpisodeMarkup}
   </div>
-  ${nextEpisodeScript}
 </body>
 </html>`
 
@@ -318,6 +281,23 @@ self.addEventListener('fetch', (event) => {
 
     if (!videoLink) {
       return buildVidlinkFallbackResponse()
+    }
+
+    let nextEpisodeHref = ""
+    if (
+      contentType === "series" &&
+      chosenStream?.source === "HiroXStream" &&
+      typeof seasonParam === "string" &&
+      typeof episodeParam === "string"
+    ) {
+      const parsedEpisode = parseInt(episodeParam, 10)
+      if (!Number.isNaN(parsedEpisode)) {
+        const nextEpisodeParams = new URLSearchParams()
+        nextEpisodeParams.set("tmdb", tmdbId)
+        nextEpisodeParams.set("season", seasonParam)
+        nextEpisodeParams.set("episode", String(parsedEpisode + 1))
+        nextEpisodeHref = `?${nextEpisodeParams.toString()}`
+      }
     }
 
     if (!poster) {
@@ -392,6 +372,11 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 #spinner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:48px; height:48px; border:4px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; display:none; }
 @keyframes spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
 
+.next-episode { position:absolute; bottom:20px; right:20px; background:rgba(229,9,20,0.92); color:#fff; border:none; padding:10px 18px; border-radius:999px; font-size:14px; font-weight:600; cursor:pointer; z-index:1000; box-shadow:0 6px 16px rgba(229,9,20,0.35); transition:background 0.2s ease; }
+.next-episode:hover { background:rgba(229,9,20,1); }
+
+.next-episode.mobile { bottom:calc(24px + env(safe-area-inset-bottom)); right:16px; }
+
 /* Gesture zones */
 #zoneLeft, #zoneRight { position:absolute; top:0; bottom:0; width:35%; cursor:pointer; }
 #zoneLeft { left:0; }
@@ -447,6 +432,7 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
   <div id="watermark">HiroXStream</div>
   <button id="centerPlay">⏯</button>
   <div id="spinner"></div>
+  ${nextEpisodeHref ? `<button id="nextEpisodeBtn" class="next-episode">Next Episode ▶</button>` : ""}
   <div id="zoneLeft"></div>
   <div id="zoneRight"></div>
   <div id="seekBadgeLeft" class="seek-badge left">
@@ -524,6 +510,8 @@ const streamVariants = ${JSON.stringify(streamVariants)};
 const streamLanguage = ${JSON.stringify(streamLanguage)};
 const storageKey = ${JSON.stringify(storageKey)};
 const initialStreamUrl = ${JSON.stringify(videoLink)};
+const nextEpisodeUrl = ${JSON.stringify(nextEpisodeHref)};
+const nextEpisodeBtn = document.getElementById("nextEpisodeBtn");
 
 let currentStreamHeaders = initialStreamHeaders || {};
 let currentStreamUrl = initialStreamUrl;
