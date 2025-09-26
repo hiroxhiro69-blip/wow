@@ -542,6 +542,31 @@ const initialEpisodeParam = ${JSON.stringify(episodeParam || "")};
 const tmdbParam = ${JSON.stringify(tmdbId || "")};
 const nextEpisodeBtn = document.getElementById("nextEpisodeBtn");
 
+let wakeLockSentinel = null;
+async function requestWakeLock(){
+  try {
+    if ('wakeLock' in navigator && navigator.wakeLock?.request){
+      wakeLockSentinel = await navigator.wakeLock.request('screen');
+      wakeLockSentinel?.addEventListener('release', () => {
+        wakeLockSentinel = null;
+      });
+    }
+  } catch(_err) {
+    wakeLockSentinel = null;
+  }
+}
+
+async function releaseWakeLock(){
+  try {
+    if (wakeLockSentinel){
+      await wakeLockSentinel.release();
+      wakeLockSentinel = null;
+    }
+  } catch(_err) {
+    wakeLockSentinel = null;
+  }
+}
+
 function computeNextEpisodeValue(raw){
   if (typeof raw !== 'string') return null;
   const trimmed = raw.trim();
