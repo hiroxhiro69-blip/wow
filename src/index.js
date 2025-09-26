@@ -185,8 +185,8 @@ self.addEventListener('fetch', (event) => {
       const seasonSegment = encodeURIComponent(seasonParam || "")
       const episodeSegment = encodeURIComponent(episodeParam || "")
       const fallbackUrl = contentType === "series"
-        ? `https://vidlink.pro/tv/${safeTmdbId}/${seasonSegment}/${episodeSegment}`
-        : `https://vidlink.pro/movie/${safeTmdbId}`
+        ? `https://player.vidplus.to/embed/tv/${safeTmdbId}/${seasonSegment}/${episodeSegment}?autoplay=true&poster=true&title=true&watchparty=false&chromecast=true&servericon=true&setting=true&pip=true&primarycolor=6C63FF&secondarycolor=9F9BFF&iconcolor=FFFFFF&logourl=https%3A%2F%2Fi.ibb.co%2F67wTJd9R%2Fpngimg-com-netflix-PNG11.png&font=Roboto&fontcolor=FFFFFF&fontsize=20&opacity=0.5`
+        : `https:player.vidplus.to/embed/movie/${safeTmdbId}?autoplay=true&poster=true&title=true&watchparty=false&chromecast=true&servericon=true&setting=true&pip=true&primarycolor=6C63FF&secondarycolor=9F9BFF&iconcolor=FFFFFF&logourl=https%3A%2F%2Fi.ibb.co%2F67wTJd9R%2Fpngimg-com-netflix-PNG11.png&font=Roboto&fontcolor=FFFFFF&fontsize=20&opacity=0.5`
       let nextEpisodeMarkup = ""
       let nextEpisodeScript = ""
 
