@@ -362,8 +362,15 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 .menu-item.active { color:#e50914; font-weight:600; }
 
 /* Spinner */
-#spinner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:48px; height:48px; border:4px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; display:none; }
+#spinner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:48px; height:48px; border:4px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; display:none; z-index:20; }
 @keyframes spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
+
+#brandingOverlay { position:absolute; inset:0; background:#03030a; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; z-index:30; transition:opacity .35s ease, visibility .35s ease; }
+#brandingOverlay.hidden { opacity:0; visibility:hidden; pointer-events:none; }
+#brandingOverlay .logo { font-size:48px; letter-spacing:4px; font-weight:700; color:#f5f5f5; text-transform:uppercase; }
+#brandingOverlay .pulse { width:64px; height:64px; border-radius:50%; border:4px solid rgba(255,255,255,0.15); border-top-color:#f44336; animation:pulse-spin 1.4s linear infinite; }
+#brandingOverlay .tagline { font-size:14px; text-transform:uppercase; letter-spacing:3px; color:rgba(255,255,255,0.65); }
+@keyframes pulse-spin { to { transform:rotate(360deg); } }
 
 /* Gesture zones */
 #zoneLeft, #zoneRight { position:absolute; top:0; bottom:0; width:35%; cursor:pointer; }
@@ -415,11 +422,16 @@ video { width:100%; height:100%; object-fit:cover; background:#000; }
 </head>
 <body>
 <div id="player">
-  <video id="video" poster="${poster}" autoplay muted playsinline webkit-playsinline x5-playsinline></video>
+  <video id="video" poster="${poster}" autoplay muted preload="auto" playsinline webkit-playsinline x5-playsinline></video>
   <div id="overlay">${overlayTitle}</div>
   <div id="watermark">HiroXStream</div>
   <button id="centerPlay">⏯</button>
   <div id="spinner"></div>
+  <div id="brandingOverlay">
+    <div class="logo">HiroXStream</div>
+    <div class="pulse"></div>
+    <div class="tagline">Loading Experience</div>
+  </div>
   <div id="zoneLeft"></div>
   <div id="zoneRight"></div>
   <div id="seekBadgeLeft" class="seek-badge left">
@@ -476,6 +488,7 @@ const speedBtn = document.getElementById("speedBtn");
 const speedMenu = document.getElementById("speedMenu");
 const pipBtn = document.getElementById("pipBtn");
 const spinner = document.getElementById("spinner");
+const brandingOverlay = document.getElementById("brandingOverlay");
 const zoneLeft = document.getElementById("zoneLeft");
 const zoneRight = document.getElementById("zoneRight");
 const seekBadgeLeft = document.getElementById("seekBadgeLeft");
@@ -563,8 +576,10 @@ if (Array.isArray(streamVariants) && streamVariants.length){
 video.setAttribute('playsinline', 'true');
 video.setAttribute('webkit-playsinline', 'true');
 video.setAttribute('x5-playsinline', 'true');
+video.setAttribute('preload', 'auto');
 video.setAttribute('muted', '');
 video.muted = true;
+video.preload = 'auto';
 video.playsInline = true;
 video.controls = false;
 
@@ -717,10 +732,13 @@ function initPlayer(){
     hls = new Hls({
       enableWorker: true,
       capLevelToPlayerSize: false,
-      startLevel: -1,
-      maxBufferLength: 30,
+      lowLatencyMode: true,
+      startLevel: 0,
+      maxBufferLength: 12,
       maxLiveSyncPlaybackRate: 1.5,
       liveDurationInfinity: true,
+      startFragPrefetch: true,
+      backBufferLength: 30,
       // Keep video rendition stable when switching audio by not forcing auto right after
       xhrSetup: function(xhr){
         xhr.withCredentials = false
@@ -733,11 +751,14 @@ function initPlayer(){
         }
       }
     })
+hls.config.autoStartLoad = true
+showBranding()
 hls.loadSource(currentStreamUrl || initialStreamUrl)
 hls.attachMedia(video)
 
 hls.on(Hls.Events.MANIFEST_PARSED, () => {
       buildAudioListFromHls()
+      hideBranding()
     })
 
     // In case tracks update after start
@@ -1155,10 +1176,14 @@ document.addEventListener('visibilitychange', () => {
 // Spinner & buffering
 function showSpinner(){ spinner.style.display='block' }
 function hideSpinner(){ spinner.style.display='none' }
+function showBranding(){ if (brandingOverlay){ brandingOverlay.classList.remove('hidden') } }
+function hideBranding(){ if (brandingOverlay){ brandingOverlay.classList.add('hidden') } }
 video.addEventListener('waiting', showSpinner)
 video.addEventListener('stalled', showSpinner)
 video.addEventListener('playing', hideSpinner)
 video.addEventListener('canplay', hideSpinner)
+video.addEventListener('playing', hideBranding)
+video.addEventListener('canplay', hideBranding)
 
 // Gestures: double-tap seek, dblclick fullscreen
 function dblSeek(dir){ video.currentTime = Math.max(0, Math.min(video.duration||Infinity, video.currentTime + (dir*10))) }
