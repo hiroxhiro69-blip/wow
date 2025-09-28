@@ -86,6 +86,11 @@ addEventListener("fetch", event => {
   let streamHeaders = {}
   let streamLanguage = "Default"
   let streamVariants = []
+  const encodedTmdbId = encodeURIComponent(tmdbId)
+  
+  const offloiEndpoint = contentType === "series"
+  ? `https://prajwal-offloi-12u-01.onrender.com/api/streams/series/${encodedTmdbId}?season=${encodeURIComponent(seasonParam)}&episode=${encodeURIComponent(episodeParam)}`
+  : `https://prajwal-offloi-12u-01.onrender.com/api/streams/movie/${encodedTmdbId}`
   
   const kstreamEndpoint = contentType === "series"
   ? `https://kstream.vercel.app/api/content/tv/${tmdbId}/${seasonParam}/${episodeParam}`
@@ -95,7 +100,16 @@ addEventListener("fetch", event => {
   ? `https://nowow.xdtohin2.workers.dev/tv/${tmdbId}/${seasonParam}/${episodeParam}`
   : `https://nowow.xdtohin2.workers.dev/movie/${tmdbId}`
   
-  const [kstreamRes, nowowRes] = await Promise.all([
+  const [offloiRes, kstreamRes, nowowRes] = await Promise.all([
+  fetch(offloiEndpoint, {
+  headers: {
+  "Accept": "application/json"
+  },
+  signal: AbortSignal.timeout(10000)
+  }).catch((err) => {
+  console.debug('Offloi API error:', err.message);
+  return null;
+  }),
   fetch(kstreamEndpoint, {
   headers: {
   "Accept": "application/json"
@@ -125,8 +139,20 @@ addEventListener("fetch", event => {
   }
   }
   
+  let offloiData = null
   let kstreamData = null
   let nowowData = null
+  
+  if (offloiRes) {
+  if (offloiRes.ok) {
+  offloiData = await parseJsonSafe(offloiRes)
+  } else {
+  console.debug(`Offloi API returned ${offloiRes.status}: ${offloiRes.statusText}`)
+  offloiData = { streams: [] }
+  }
+  } else {
+  console.debug('Offloi API failed to respond')
+  }
   
   if (kstreamRes) {
   if (kstreamRes.ok) {
@@ -207,14 +233,16 @@ addEventListener("fetch", event => {
   return new Response(html, { headers: { "Content-Type": "text/html" } })
   }
   
+  const offloiStreams = Array.isArray(offloiData?.streams) ? offloiData.streams : []
   const kstreamStreams = Array.isArray(kstreamData?.streams) ? kstreamData.streams : []
   const nowowStreams = Array.isArray(nowowData?.streams) ? nowowData.streams : []
   
+  const annotatedOffloi = offloiStreams.map((s) => ({ ...s, source: "offloi" }))
   const annotatedKstream = kstreamStreams.map((s) => ({ ...s, source: "HiroXStream" }))
   const annotatedNowow = nowowStreams.map((s) => ({ ...s, source: "nowow" }))
   
   // Check if we have any valid streams
-  const hasValidStreams = annotatedKstream.some(s => s.url) || annotatedNowow.some(s => s.url)
+  const hasValidStreams = annotatedOffloi.some(s => s.url) || annotatedKstream.some(s => s.url) || annotatedNowow.some(s => s.url)
   
   if (!hasValidStreams) {
   console.debug('No valid streams found, using fallback player')
@@ -223,15 +251,20 @@ addEventListener("fetch", event => {
   
   const pickPreferredStream = (streams) => {
   const lower = (value) => (typeof value === "string" ? value.toLowerCase() : "")
-  const english = streams.find(s => lower(s.language).includes("english"))
+  const english = streams.find(s => {
+  return lower(s.language).includes("english") || lower(s.title).includes("english") || lower(s.name).includes("english")
+  })
   return english || streams[0]
   }
   
+  const chosenOffloiStream = annotatedOffloi.length ? pickPreferredStream(annotatedOffloi) : null
   const chosenKStream = annotatedKstream.length ? pickPreferredStream(annotatedKstream) : null
   const chosenNowowStream = annotatedNowow.length ? pickPreferredStream(annotatedNowow) : null
   
   let chosenStream = null
-  if (chosenNowowStream && chosenNowowStream.url) {
+  if (chosenOffloiStream && chosenOffloiStream.url) {
+  chosenStream = chosenOffloiStream
+  } else if (chosenNowowStream && chosenNowowStream.url) {
   chosenStream = chosenNowowStream
   } else if (chosenKStream && chosenKStream.url) {
   chosenStream = chosenKStream
@@ -242,7 +275,7 @@ addEventListener("fetch", event => {
   streamLanguage = chosenStream?.language || "Default"
   
   const combinedStreams = (() => {
-  const order = [...annotatedNowow, ...annotatedKstream]
+  const order = [...annotatedOffloi, ...annotatedNowow, ...annotatedKstream]
   const seen = new Set()
   const unique = []
   for (const entry of order) {
@@ -256,14 +289,14 @@ addEventListener("fetch", event => {
   
   streamVariants = combinedStreams.map((s, idx) => ({
   id: idx,
-  language: s.language || `Stream ${idx + 1}`,
+  language: s.language || s.title || s.name || `Stream ${idx + 1}`,
   url: s.url,
   headers: s.headers || {},
   source: s.source || "unknown"
   }))
   
-  title = kstreamData?.title || nowowData?.title || `TMDB #${tmdbId}`
-  poster = kstreamData?.poster || kstreamData?.thumbnail || nowowData?.poster || nowowData?.thumbnail || ""
+  title = offloiData?.title || kstreamData?.title || nowowData?.title || `TMDB #${tmdbId}`
+  poster = offloiData?.poster || offloiData?.thumbnail || kstreamData?.poster || kstreamData?.thumbnail || nowowData?.poster || nowowData?.thumbnail || ""
   
   if (!videoLink) {
   console.debug('No valid video link found, using fallback player')
