@@ -42,6 +42,15 @@ addEventListener("fetch", event => {
   }
   })
   }
+
+  if (path === '/favicon.ico') {
+  return new Response(null, {
+  status: 204,
+  headers: {
+  'Cache-Control': 'public, max-age=86400'
+  }
+  })
+  }
   
   if (path === '/sw.js') {
   const swScript = `const CACHE_VERSION = 'hiroxstream-shell-v1';
@@ -271,7 +280,7 @@ addEventListener("fetch", event => {
   }
   
   videoLink = chosenStream?.url || ""
-  streamHeaders = chosenStream?.headers || {}
+  streamHeaders = sanitizeHeaders(chosenStream?.headers || {})
   streamLanguage = chosenStream?.language || "Default"
   
   const combinedStreams = (() => {
@@ -291,7 +300,7 @@ addEventListener("fetch", event => {
   id: idx,
   language: s.language || s.title || s.name || `Stream ${idx + 1}`,
   url: s.url,
-  headers: s.headers || {},
+  headers: sanitizeHeaders(s.headers || {}),
   source: s.source || "unknown"
   }))
   
@@ -332,9 +341,11 @@ addEventListener("fetch", event => {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#000000">
+  <meta name="mobile-web-app-capable" content="yes">
   <link rel="manifest" href="/manifest.webmanifest">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='24' fill='%23000'/%3E%3Ctext x='50%25' y='58%25' font-size='56' fill='%23f5f5f5' font-family='Verdana' text-anchor='middle'%3EHX%3C/text%3E%3C/svg%3E">
   <title>${title}</title>
   <style>
   html, body { margin:0; height:100%; background:#000; font-family:'Roboto',sans-serif; overflow:hidden; }
