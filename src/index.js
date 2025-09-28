@@ -147,11 +147,113 @@ addEventListener("fetch", event => {
   return null
   }
   }
-  
+
+  const sanitizeHeaders = (headers) => {
+  if (!headers || typeof headers !== "object") return {}
+  const forbidden = new Set([
+  "accept-charset",
+  "accept-encoding",
+  "access-control-request-headers",
+  "access-control-request-method",
+  "connection",
+  "content-length",
+  "cookie",
+  "cookie2",
+  "date",
+  "dnt",
+  "expect",
+  "host",
+  "keep-alive",
+  "origin",
+  "referer",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+  "via"
+  ])
+  const cleaned = {}
+  for (const [key, value] of Object.entries(headers)) {
+  if (value == null) continue
+  const lower = key.toLowerCase()
+  if (forbidden.has(lower)) continue
+  if (lower.startsWith('proxy-')) continue
+  if (lower.startsWith('sec-')) continue
+  cleaned[key] = value
+  }
+  return cleaned
+  }
+
+  const tryDecodeBase64 = (raw) => {
+  if (typeof raw !== "string" || !raw.trim()) return null
+  try {
+  const normalized = raw.trim().replace(/\s+/g, "").replace(/-/g, "+").replace(/_/g, "/")
+  const padding = normalized.length % 4
+  const padded = padding ? normalized + "=".repeat(4 - padding) : normalized
+  if (typeof atob === "function") {
+  return atob(padded)
+  }
+  if (typeof Buffer === "function") {
+  return Buffer.from(padded, "base64").toString("utf-8")
+  }
+  return null
+  } catch (_err) {
+  return null
+  }
+  }
+
+  const decodeOffloiUrl = (value) => {
+  if (typeof value !== "string" || !value) return value
+
+  const isHttp = (input) => /^https?:\/\//i.test(input)
+  const queue = [value]
+  const seen = new Set()
+
+  while (queue.length) {
+  const current = queue.shift()
+  if (typeof current !== "string" || seen.has(current)) continue
+  seen.add(current)
+
+  if (isHttp(current)) {
+  return current
+  }
+
+  const decoded = tryDecodeBase64(current)
+  if (decoded) {
+  if (isHttp(decoded)) {
+  return decoded
+  }
+  if (!seen.has(decoded)) {
+  queue.push(decoded)
+  }
+  }
+
+  if (current.includes(":")) {
+  for (const fragment of current.split(":")) {
+  if (!fragment) continue
+  if (isHttp(fragment)) {
+  return fragment
+  }
+  const fragmentDecoded = tryDecodeBase64(fragment)
+  if (fragmentDecoded) {
+  if (isHttp(fragmentDecoded)) {
+  return fragmentDecoded
+  }
+  if (!seen.has(fragmentDecoded)) {
+  queue.push(fragmentDecoded)
+  }
+  }
+  }
+  }
+  }
+
+  return value
+  }
+
   let offloiData = null
   let kstreamData = null
   let nowowData = null
-  
+
   if (offloiRes) {
   if (offloiRes.ok) {
   offloiData = await parseJsonSafe(offloiRes)
@@ -162,7 +264,7 @@ addEventListener("fetch", event => {
   } else {
   console.debug('Offloi API failed to respond')
   }
-  
+
   if (kstreamRes) {
   if (kstreamRes.ok) {
   kstreamData = await parseJsonSafe(kstreamRes)
@@ -246,9 +348,18 @@ addEventListener("fetch", event => {
   const kstreamStreams = Array.isArray(kstreamData?.streams) ? kstreamData.streams : []
   const nowowStreams = Array.isArray(nowowData?.streams) ? nowowData.streams : []
   
-  const annotatedOffloi = offloiStreams.map((s) => ({ ...s, source: "offloi" }))
-  const annotatedKstream = kstreamStreams.map((s) => ({ ...s, source: "HiroXStream" }))
-  const annotatedNowow = nowowStreams.map((s) => ({ ...s, source: "nowow" }))
+  const annotateStream = (stream, source) => {
+  const sanitized = sanitizeHeaders(stream?.headers || {})
+  let url = stream?.url || ""
+  if (source === "offloi") {
+  url = decodeOffloiUrl(url)
+  }
+  return { ...stream, url, headers: sanitized, source }
+  }
+
+  const annotatedOffloi = offloiStreams.map((s) => annotateStream(s, "offloi"))
+  const annotatedKstream = kstreamStreams.map((s) => annotateStream(s, "HiroXStream"))
+  const annotatedNowow = nowowStreams.map((s) => annotateStream(s, "nowow"))
   
   // Check if we have any valid streams
   const hasValidStreams = annotatedOffloi.some(s => s.url) || annotatedKstream.some(s => s.url) || annotatedNowow.some(s => s.url)
