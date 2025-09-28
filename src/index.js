@@ -24,14 +24,16 @@ addEventListener("fetch", event => {
   lang: 'en',
   icons: [
   {
-  src: 'https://hiroxstream.pages.dev/android-chrome-192x192.png',
+  src: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"%3E%3Crect width="192" height="192" rx="32" fill="%23000"/%3E%3Ctext x="50%25" y="58%25" font-size="96" fill="%23f5f5f5" font-family="Verdana" text-anchor="middle"%3EHX%3C/text%3E%3C/svg%3E',
   sizes: '192x192',
-  type: 'image/png'
+  type: 'image/svg+xml',
+  purpose: 'any maskable'
   },
   {
-  src: 'https://hiroxstream.pages.dev/android-chrome-512x512.png',
+  src: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"%3E%3Crect width="512" height="512" rx="64" fill="%23000"/%3E%3Ctext x="50%25" y="56%25" font-size="224" fill="%23f5f5f5" font-family="Verdana" text-anchor="middle"%3EHX%3C/text%3E%3C/svg%3E',
   sizes: '512x512',
-  type: 'image/png'
+  type: 'image/svg+xml',
+  purpose: 'any maskable'
   }
   ]
   }
@@ -247,7 +249,7 @@ addEventListener("fetch", event => {
   }
   }
 
-  return value
+  return null
   }
 
   let offloiData = null
@@ -352,7 +354,8 @@ addEventListener("fetch", event => {
   const sanitized = sanitizeHeaders(stream?.headers || {})
   let url = stream?.url || ""
   if (source === "offloi") {
-  url = decodeOffloiUrl(url)
+  const decoded = decodeOffloiUrl(url)
+  url = typeof decoded === "string" ? decoded : ""
   }
   return { ...stream, url, headers: sanitized, source }
   }
