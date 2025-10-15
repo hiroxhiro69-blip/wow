@@ -316,7 +316,12 @@ addEventListener("fetch", event => {
   #player.show-controls #overlay { opacity:1; }
   #player.hide-cursor #overlay { opacity:0; }
   #watermark { position:absolute; top:20px; right:20px; padding:6px 12px; font-size:14px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:rgba(255,255,255,0.85); background:rgba(0,0,0,0.45); border-radius:6px; pointer-events:none; backdrop-filter:blur(4px); }
-  #centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:64px; color:rgba(255,255,255,0.85); display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; }
+  #centerPlay { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:80px; height:80px; background:rgba(0,0,0,0.7); border:2px solid rgba(255,255,255,0.9); border-radius:50%; display:flex; align-items:center; justify-content:center; cursor:pointer; pointer-events:auto; transition:all 0.3s ease; backdrop-filter:blur(8px); box-shadow:0 4px 20px rgba(0,0,0,0.5); }
+  #centerPlay:hover { background:rgba(255,255,255,0.1); border-color:rgba(255,255,255,1); transform:translate(-50%,-50%) scale(1.05); }
+  #centerPlay:active { transform:translate(-50%,-50%) scale(0.95); }
+  #centerPlay svg { width:32px; height:32px; color:#fff; transition:opacity 0.3s ease; }
+  #centerPlay:hover svg { opacity:1; }
+  #centerPlay.hidden { opacity:0; pointer-events:none; transform:translate(-50%,-50%) scale(0.9); }
   
   /* Netflix-like controls */
   #controls { position:absolute; left:0; right:0; bottom:0; padding:16px 16px calc(20px + env(safe-area-inset-bottom)); background:linear-gradient(to top, rgba(0,0,0,0.7), rgba(0,0,0,0)); opacity:0; transform:translateY(10px); transition:opacity .25s ease, transform .25s ease; }
@@ -350,16 +355,9 @@ addEventListener("fetch", event => {
   .menu-item:hover { background:rgba(255,255,255,0.1); }
   .menu-item.active { color:#e50914; font-weight:600; }
   
-  /* Spinner */
-  #spinner { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:48px; height:48px; border:4px solid rgba(255,255,255,0.2); border-top-color:#fff; border-radius:50%; animation:spin 1s linear infinite; display:none; z-index:20; }
-  @keyframes spin { to { transform:translate(-50%,-50%) rotate(360deg); } }
+  /* Spinner removed for better performance */
   
-  #brandingOverlay { position:absolute; inset:0; background:#03030a; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:12px; z-index:30; transition:opacity .35s ease, visibility .35s ease; }
-  #brandingOverlay.hidden { opacity:0; visibility:hidden; pointer-events:none; }
-  #brandingOverlay .logo { font-size:48px; letter-spacing:4px; font-weight:700; color:#f5f5f5; text-transform:uppercase; }
-  #brandingOverlay .pulse { width:64px; height:64px; border-radius:50%; border:4px solid rgba(255,255,255,0.15); border-top-color:#f44336; animation:pulse-spin 1.4s linear infinite; }
-  #brandingOverlay .tagline { font-size:14px; text-transform:uppercase; letter-spacing:3px; color:rgba(255,255,255,0.65); }
-  @keyframes pulse-spin { to { transform:rotate(360deg); } }
+  /* Branding overlay removed for faster loading */
   
   /* Gesture zones */
   #zoneLeft, #zoneRight { position:absolute; top:0; bottom:0; width:35%; cursor:pointer; }
@@ -371,17 +369,17 @@ addEventListener("fetch", event => {
   #controls { padding:20px 12px calc(30px + env(safe-area-inset-bottom)); }
   .controls-bottom { flex-direction:column; align-items:stretch; gap:14px; }
   .desktop-actions { display:none; }
-  .main-controls { background:rgba(0,0,0,0.4); border-radius:999px; padding:10px 14px; justify-content:space-between; align-items:center; }
+  .main-controls { background:rgba(0,0,0,0.5); border-radius:20px; padding:12px 16px; justify-content:space-between; align-items:center; backdrop-filter:blur(8px); }
   .round-btn { display:flex; font-size:18px; background:rgba(255,255,255,0.14); }
   .round-btn.active { background:#e50914; }
-  #mobilePlayToggle { width:52px; height:52px; font-size:20px; }
-  .mobile-actions { display:flex; flex:1; justify-content:flex-end; gap:10px; }
-  .time { flex:1; text-align:center; font-size:13px; color:#f5f5f5; }
-  #seekContainer { height:6px; margin:4px 0 8px; }
+  #mobilePlayToggle { width:60px; height:60px; font-size:26px; }
+  .mobile-actions { display:flex; flex:1; justify-content:flex-end; gap:12px; }
+  .time { flex:1; text-align:center; font-size:14px; color:#f5f5f5; font-weight:500; }
+  #seekContainer { height:6px; margin:6px 0 10px; }
   #volumeContainer { display:none; }
-  #audioMenu, #qualityMenu, #speedMenu { position:fixed; left:0; right:0; bottom:0; border-radius:16px 16px 0 0; padding-bottom:calc(18px + env(safe-area-inset-bottom)); margin:0; max-height:50vh; }
-  .audio-item, .menu-item { padding:16px 20px; font-size:16px; }
-  #zoneLeft, #zoneRight { width:48%; }
+  #audioMenu, #qualityMenu, #speedMenu { position:fixed; left:0; right:0; bottom:0; border-radius:20px 20px 0 0; padding-bottom:calc(20px + env(safe-area-inset-bottom)); margin:0; max-height:50vh; backdrop-filter:blur(10px); }
+  .audio-item, .menu-item { padding:18px 24px; font-size:16px; }
+  #zoneLeft, #zoneRight { width:50%; }
   }
   
   /* Control layout */
@@ -390,9 +388,14 @@ addEventListener("fetch", event => {
   .main-controls { display:flex; align-items:center; justify-content:flex-start; gap:12px; width:100%; }
   .mobile-actions { display:none; align-items:center; gap:10px; }
   .desktop-actions { display:flex; align-items:center; gap:12px; }
-  .round-btn { background:rgba(255,255,255,0.08); border:none; color:white; width:44px; height:44px; border-radius:50%; display:none; align-items:center; justify-content:center; font-size:18px; padding:0; transition:background .2s ease, transform .2s ease; }
-  .round-btn:hover { background:rgba(255,255,255,0.12); }
-  .round-btn:active { transform:scale(0.92); }
+  .round-btn { background:rgba(255,255,255,0.12); border:none; color:white; width:48px; height:48px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:20px; padding:0; transition:all 0.3s ease; cursor:pointer; backdrop-filter:blur(8px); box-shadow:0 2px 10px rgba(0,0,0,0.3); }
+  .round-btn:hover { background:rgba(255,255,255,0.2); transform:scale(1.05); }
+  .round-btn:active { transform:scale(0.95); }
+  .round-btn.active { background:#e50914; box-shadow:0 0 20px rgba(229,9,20,0.5); }
+  .round-btn.active:hover { background:#ff0f1a; }
+  #mobilePlayToggle svg { width:24px; height:24px; transition:opacity 0.3s ease; }
+  #mobilePlayToggle .play-icon { display:block; }
+  #mobilePlayToggle .pause-icon { display:none; }
   .left, .right { display:flex; align-items:center; gap:12px; }
   
   /* Seek badges (Netflix-like) */
@@ -414,7 +417,11 @@ addEventListener("fetch", event => {
   <video id="video" poster="${poster}" autoplay muted preload="auto" playsinline webkit-playsinline x5-playsinline></video>
   <div id="overlay">${overlayTitle}</div>
   <div id="watermark">HiroXStream</div>
-  <button id="centerPlay">⏯</button>
+  <button id="centerPlay" class="center-play-btn">
+    <svg viewBox="0 0 24 24" fill="currentColor">
+      <path d="M8 5v14l11-7z"/>
+    </svg>
+  </button>
   <div id="spinner"></div>
   <div id="brandingOverlay">
   <div class="logo">HiroXStream</div>
@@ -436,7 +443,14 @@ addEventListener("fetch", event => {
   <div id="seekContainer"><div id="seekProgress"></div></div>
   <div class="controls-bottom">
   <div class="main-controls">
-  <button class="round-btn" id="mobilePlayToggle" aria-label="Play/Pause">▶</button>
+  <button class="round-btn" id="mobilePlayToggle" aria-label="Play/Pause">
+    <svg viewBox="0 0 24 24" fill="currentColor" class="play-icon">
+      <path d="M8 5v14l11-7z"/>
+    </svg>
+    <svg viewBox="0 0 24 24" fill="currentColor" class="pause-icon" style="display:none;">
+      <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+    </svg>
+  </button>
   <span class="time" id="timeLabel">00:00 / 00:00</span>
   <div class="mobile-actions">
   <button class="round-btn" id="mobileMute" aria-label="Mute">🔊</button>
@@ -830,16 +844,18 @@ addEventListener("fetch", event => {
   video.addEventListener("play", ()=>{
   centerPlay.style.display='none'
   if (mobilePlayToggle){
-  mobilePlayToggle.textContent = '⏸'
   mobilePlayToggle.classList.add('active')
+  mobilePlayToggle.querySelector('.play-icon').style.display = 'none'
+  mobilePlayToggle.querySelector('.pause-icon').style.display = 'block'
   }
   requestWakeLock().catch(()=>{})
   })
   video.addEventListener("pause", ()=>{
   centerPlay.style.display='flex'
   if (mobilePlayToggle){
-  mobilePlayToggle.textContent = '▶'
   mobilePlayToggle.classList.remove('active')
+  mobilePlayToggle.querySelector('.play-icon').style.display = 'block'
+  mobilePlayToggle.querySelector('.pause-icon').style.display = 'none'
   }
   releaseWakeLock().catch(()=>{})
   })
